@@ -290,15 +290,33 @@ def redescribe_status(job):
 
 # ---------------------------------------------------------------- mock mode
 MOCK_DIR = "/tmp/hop24_mock"
+LOCAL = os.environ.get("HOP24_LOCALDATA", "")
+
+
+def local_segs():
+    if not LOCAL or not os.path.isdir(LOCAL):
+        return []
+    n = sorted(f for f in os.listdir(LOCAL) if f.startswith("seg") and f.endswith(".mp4"))
+    return ["local://" + f for f in n]
+
 
 
 def mock_levels():
+    ls = local_segs()
+    if ls:
+        return [{"camera": "scene1_p1c2", "filename": "20261001_055821_scene1_p1c2_chunk_0003.mp4", "original_video": "s3://local/chunk_0003",
+                 "n": len(ls), "segments": ls}]
     return [{"camera": "scene1_p1c2", "filename": "mock_scene1_p1c2_chunk_0000.mp4",
              "original_video": "mock", "n": 2,
              "segments": ["mock://seg1.mp4", "mock://seg2.mp4"]}]
 
 
 def mock_boxes(source):
+    if source.startswith("local://"):
+        with open(os.path.join(LOCAL, source[8:].replace(".mp4", ".json"))) as fh:
+            d = json.load(fh)
+        out = [{"t": f["time_sec"], "b": [[b["label"], b["confidence"], [float(x) for x in b["bbox"]]] for b in f.get("boxes", [])]} for f in d["frames"]]
+        return {"frames": out, "shape": [d.get("height", 1080), d.get("width", 1920)], "count": sum(len(f["b"]) for f in out), "format": "xyxy"}
     fast = source.endswith("seg2.mp4")
     frames = []
     for i in range(150):
@@ -314,6 +332,8 @@ def mock_boxes(source):
 
 
 def mock_video(source):
+    if source.startswith("local://"):
+        return os.path.join(LOCAL, source[8:])
     """Render the mock clip with ffmpeg once; boxes above follow the same equations."""
     os.makedirs(MOCK_DIR, exist_ok=True)
     fast = source.endswith("seg2.mp4")

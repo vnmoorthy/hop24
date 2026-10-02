@@ -181,15 +181,13 @@ let S = null, levels = [], showBoxes = true, calibrating = 0, frames = 0, fpsT =
 
 function mkVideo() { const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; return v; }
 function toast(t, ms = 2600) { $('toast').textContent = t; $('toast').classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('on'), ms); }
-function roadFor(camera) { try { const r = JSON.parse(localStorage.getItem('hop24.road.' + camera)); if (r && r.top < r.bottom) return r; } catch (e) {} return { top: Math.round(H * 0.22), bottom: Math.round(H * 0.92) }; }
 function segUrl(src) { return BASE + 'stream?source=' + encodeURIComponent(src); }
 
 // ---------------------------------------------------------------- session
 function newSession(level, segments) {
-  const road = roadFor(level.camera);
-  S = { level, segments, segIdx: 0, active: 0, boxes: [], shape: [1080, 1920], road, chicken: { w: 44, h: 44, x: W / 2 - 22, y: 0 },
+  S = { level, segments, segIdx: 0, active: 0, boxes: [], shape: [1080, 1920], axis: null, chicken: { w: 44, h: 44, x: W / 2 - 22, y: 0 },
         t0: 0, dead: false, won: false, started: false, killer: null, auto: false, hopT: 0, anim: 0, lastHop: 0, hist: new Map() };
-  S.chicken.y = Math.min(H - 50, road.bottom + 4);
+  S.chicken.y = H - 50;
   $('hcam').textContent = level.camera + ' · ' + level.filename.replace(/^\d+_\d+_scene\d+_p\d+c\d+_/, '').replace('.mp4', '');
   $('segbar').innerHTML = segments.map(() => '<i></i>').join('');
 }
@@ -201,9 +199,10 @@ async function loadLevel(level, segments, opts = {}) {
   const res = await Promise.all(segments.map(s => api('boxes?source=' + encodeURIComponent(s)).catch(e => ({ frames: [], shape: [1080, 1920], error: String(e) }))));
   S.boxes = res.map(r => ({ ts: (r.frames || []).map(f => f.t), fr: r.frames || [], err: r.error }));
   if (res[0] && res[0].shape) S.shape = res[0].shape;
+  autoRoad();
   const nb = res.reduce((a, r) => a + (r.count || 0), 0), bad = res.filter(r => r.error).length;
   $('hboxes').textContent = nb.toLocaleString() + ' boxes';
-  $('introStatus').textContent = `${nb.toLocaleString()} detections across ${segments.length} segments` + (bad ? ` · ${bad} segment(s) have no detections` : '') + ' · press space';
+  $('introStatus').textContent = `${nb.toLocaleString()} detections across ${segments.length} segments` + (bad ? ` · ${bad} segment(s) have no detections` : '') + ' · road band ' + (S.roadAuto ? 'derived from the detections' : 'calibrated') + ' · press space';
   vids[0].src = segUrl(segments[0]); vids[0].load();
   if (segments[1]) { vids[1].src = segUrl(segments[1]); vids[1].load(); }
   banner('', '');
@@ -211,12 +210,57 @@ async function loadLevel(level, segments, opts = {}) {
   draw();
 }
 
+// Road geometry from the stored detections: traffic direction d (PCA of box centres), normal n (pointing up-screen),
+// road extent [pmin, pmax] along n. The player spawns on the near side and must reach the far side.
+function autoRoad() {
+  const sx = W / S.shape[1], sy = H / S.shape[0], pts = [];
+  for (const sg of S.boxes) for (let i = 0; i < sg.fr.length; i += 3) for (const [label, conf, b] of sg.fr[i].b) {
+    if (label === 'person') continue;
+    pts.push([(b[0] + b[2]) / 2 * sx, (b[1] + b[3]) / 2 * sy, Math.hypot((b[2] - b[0]) * sx, (b[3] - b[1]) * sy) / 2]);
+  }
+  const saved = JSON.parse(localStorage.getItem('hop24.axis.' + S.level.camera) || 'null');
+  if (saved) { S.axis = saved; }
+  else if (pts.length < 40) { S.axis = { d: [1, 0], n: [0, -1], mu: [W / 2, H / 2], pmin: -H * 0.35, pmax: H * 0.28 }; }
+  else {
+    let mx = 0, my = 0; for (const p of pts) { mx += p[0]; my += p[1]; } mx /= pts.length; my /= pts.length;
+    let sxx = 0, syy = 0, sxy = 0; for (const p of pts) { const dx = p[0] - mx, dy = p[1] - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+    const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    let d = [Math.cos(th), Math.sin(th)], n = [-d[1], d[0]]; if (n[1] > 0) n = [-n[0], -n[1]];
+    const lo = [], hi = [];
+    for (const p of pts) { const c = (p[0] - mx) * n[0] + (p[1] - my) * n[1]; lo.push(c - p[2] * 0.8); hi.push(c + p[2] * 0.8); }
+    lo.sort((a, b) => a - b); hi.sort((a, b) => a - b);
+    const q = (arr, f) => arr[Math.min(arr.length - 1, Math.floor(f * arr.length))];
+    S.axis = { d, n, mu: [mx, my], pmin: q(lo, 0.01), pmax: q(hi, 0.99) };
+  }
+  S.roadAuto = !saved;
+  spawn();
+}
+function proj(x, y) { const a = S.axis; return (x - a.mu[0]) * a.n[0] + (y - a.mu[1]) * a.n[1]; }
+function spawn() {
+  const a = S.axis, c = S.chicken, p = a.pmin - c.h * 1.1;
+  // candidate points along the near edge; keep the ones fully inside the frame, take the middle one
+  const cand = [];
+  for (let t = -2500; t <= 2500; t += 10) { const x = a.mu[0] + a.n[0] * p + a.d[0] * t - c.w / 2, y = a.mu[1] + a.n[1] * p + a.d[1] * t - c.h / 2; if (x > 4 && y > 4 && x + c.w < W - 4 && y + c.h < H - 4) cand.push([x, y]); }
+  if (cand.length) { const m = cand[Math.floor(cand.length / 2)]; c.x = m[0]; c.y = m[1]; }
+  else { c.x = 20; c.y = H - c.h - 6; }
+  S.spawn = [c.x, c.y];
+  // goal: the far edge, or the last point of the chicken's path that is still inside the frame
+  let reach = a.pmax + 12;
+  for (let k = 0; k < 4000; k += 4) { const px = c.x + c.w / 2 + a.n[0] * k, py = c.y + c.h / 2 + a.n[1] * k; if (px < c.w / 2 || py < c.h / 2 || px > W - c.w / 2 || py > H - c.h / 2) { reach = Math.min(reach, proj(px, py) - 6); break; } }
+  S.goal = reach;
+}
+function roadLine(p, color, dash) {
+  const a = S.axis; ctx.save(); ctx.strokeStyle = color; ctx.setLineDash(dash); ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(a.mu[0] + a.n[0] * p - a.d[0] * 3000, a.mu[1] + a.n[1] * p - a.d[1] * 3000); ctx.lineTo(a.mu[0] + a.n[0] * p + a.d[0] * 3000, a.mu[1] + a.n[1] * p + a.d[1] * 3000); ctx.stroke(); ctx.restore();
+}
+
 function stopAll() { vids.forEach(v => { v.pause(); v.onended = null; }); }
 
 function start(auto = false) {
   if (!S) return;
   if (S.dead || S.won) return loadLevel(S.level, S.segments).then(() => start(auto));
-  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.hist.clear(); vids.forEach(v => { v.playbackRate = 1; });
+  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; vids.forEach(v => { v.playbackRate = 1; });
+  if (S.spawn) { S.chicken.x = S.spawn[0]; S.chicken.y = S.spawn[1]; }
   $('intro').classList.remove('on'); $('stage').classList.remove('shake');
   $('hmode').style.display = auto ? '' : 'none'; $('thought').classList.toggle('on', auto);
   $('inv').disabled = true; $('report').disabled = true; $('manhunt').style.display = 'none';
@@ -247,31 +291,38 @@ function curFrame(seg = S.segIdx, t = vids[S.active].currentTime) {
 
 // ---------------------------------------------------------------- autopilot (no peeking: velocity from the last ~0.3 s of boxes)
 function autopilot(fr, now) {
-  const c = S.chicken, sx = W / S.shape[1], sy = H / S.shape[0];
-  const step = (S.road.bottom - S.road.top) / 8;
-  const nextY = c.y - step, look = 0.6, margin = 18;
-  // track boxes by rough identity (label + lane band) to estimate velocity
-  let danger = null;
+  const c = S.chicken, a = S.axis, sx = W / S.shape[1], sy = H / S.shape[0];
+  const step = (a.pmax - a.pmin) / 8, look = 0.65, margin = 16;
+  // velocity per box by nearest-neighbour matching against the previous frame (robust to label flicker)
+  const prev = S.prevBoxes || [], cur = [];
   for (const [label, conf, b] of fr.b) {
     if (label === 'person') continue;
-    const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
-    const key = label + '|' + Math.round((y + h / 2) / 40);
-    const prev = S.hist.get(key);
-    S.hist.set(key, { x, t: now });
-    const vx = prev && now - prev.t > 0.05 && now - prev.t < 0.5 ? (x - prev.x) / (now - prev.t) : 0; // px/s
-    const inLane = y < nextY + c.h + margin && y + h > nextY - margin;
-    if (!inLane) continue;
-    for (let k = 0; k <= 6; k++) { // sample the next 0.6 s
-      const xt = x + vx * (look * k / 6);
-      if (xt < c.x + c.w + margin && xt + w > c.x - margin) { danger = { label, vx: Math.round(vx), eta: (look * k / 6).toFixed(1) }; break; }
+    const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy, cx = x + w / 2, cy = y + h / 2;
+    let best = null, bd = Math.max(70, w);
+    for (const q of prev) { const d = Math.hypot(q.cx - cx, q.cy - cy); if (d < bd) { bd = d; best = q; } }
+    let vx = 0, vy = 0, known = false;
+    if (best && now - best.t > 0.02 && now - best.t < 0.4) { const dt = now - best.t; vx = (cx - best.cx) / dt; vy = (cy - best.cy) / dt; if (best.known) { vx = 0.5 * vx + 0.5 * best.vx; vy = 0.5 * vy + 0.5 * best.vy; } known = true; }
+    else if (best && best.known) { vx = best.vx; vy = best.vy; known = true; }
+    cur.push({ label, x, y, w, h, cx, cy, t: known || !best ? now : best.t, vx, vy, known });
+  }
+  S.prevBoxes = cur;
+  const dangerAt = (px, py) => {
+    for (const q of cur) {
+      let vx = q.vx, vy = q.vy;
+      if (!q.known) { const toward = Math.sign((px - q.x) * a.d[0] + (py - q.y) * a.d[1]) || 1; vx = a.d[0] * 900 * toward; vy = a.d[1] * 900 * toward; }
+      for (let k = 0; k <= 6; k++) { const t = look * k / 6, bx = q.x + vx * t, by = q.y + vy * t;
+        if (bx < px + c.w + margin && bx + q.w > px - margin && by < py + c.h + margin && by + q.h > py - margin) return { label: q.label, v: q.known ? Math.round(Math.hypot(q.vx, q.vy)) : '?', eta: t.toFixed(1) }; }
     }
-    if (danger) break;
-  }
-  if (danger) {
-    $('thought').textContent = `hold · ${danger.label} in next lane, ${Math.abs(danger.vx)} px/s ${danger.vx < 0 ? '←' : '→'}, reaches me in ${danger.eta}s`;
-    return;
-  }
-  if (now - S.lastHop > 0.28) { c.y = Math.max(0, nextY); S.lastHop = now; if (!S.t0) S.t0 = performance.now(); S.anim++; $('thought').textContent = 'next lane clear for 0.6 s → hop'; }
+    return null;
+  };
+  const nx = c.x + a.n[0] * step, ny = c.y + a.n[1] * step, bx = c.x - a.n[0] * step, by = c.y - a.n[1] * step;
+  const here = dangerAt(c.x, c.y), next = dangerAt(nx, ny);
+  const hop = (x, y, why) => { c.x = Math.max(0, Math.min(W - c.w, x)); c.y = Math.max(0, Math.min(H - c.h, y)); S.lastHop = now; if (!S.t0) S.t0 = performance.now(); S.anim++; $('thought').textContent = why; };
+  if (now < 0.45) { $('thought').textContent = 'watching the traffic to estimate speeds…'; return; }
+  if (now - S.lastHop < 0.26) return;
+  if (!next) return hop(nx, ny, 'next lane clear for 0.65 s → hop');
+  if (here) { const back = dangerAt(bx, by); if (!back) return hop(bx, by, `dodge back · ${here.label} on me in ${here.eta}s, next lane also blocked by ${next.label}`); }
+  $('thought').textContent = `hold · ${next.label} crossing the next lane at ${next.v} px/s, there in ${next.eta}s`;
 }
 
 // ---------------------------------------------------------------- draw loop
@@ -282,8 +333,7 @@ function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (v.readyState >= 2) ctx.drawImage(v, 0, 0, W, H);
   const sx = W / S.shape[1], sy = H / S.shape[0];
-  ctx.save(); ctx.strokeStyle = 'rgba(255,204,51,.35)'; ctx.setLineDash([10, 10]); ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, S.road.top); ctx.lineTo(W, S.road.top); ctx.moveTo(0, S.road.bottom); ctx.lineTo(W, S.road.bottom); ctx.stroke(); ctx.restore();
+  if (S.axis) { roadLine(S.axis.pmin, 'rgba(255,204,51,.35)', [10, 10]); roadLine(S.goal, 'rgba(61,220,132,.6)', [14, 8]); }
   const replaying = S.replay && S.replay.phase === 'playing';
   if (replaying && (v.currentTime >= S.replay.until - 0.02 || v.ended)) { v.pause(); v.playbackRate = 1; S.replay.phase = 'done'; if (S.pendingBanner) { banner(...S.pendingBanner); S.pendingBanner = null; } }
   const fr = (S.started || S.replay) ? curFrame() : null, c = S.chicken, now = S.segIdx * SEG_SEC + v.currentTime;
@@ -307,13 +357,13 @@ function draw() {
       const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
       if (showBoxes) { ctx.strokeStyle = label === 'truck' || label === 'bus' ? 'rgba(255,140,66,.9)' : 'rgba(90,176,255,.85)'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
         ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y - 14, 7.2 * label.length + 8, 14); ctx.fillStyle = '#fff'; ctx.font = '11px ' + 'ui-monospace, Menlo, monospace'; ctx.fillText(label, x + 4, y - 3); }
-      if (!S.dead && !S.won && S.started && c.x < x + w && c.x + c.w > x && c.y < y + h && c.y + c.h > y) hit = { label, conf, b: [x, y, w, h], raw: b };
+      if (!S.dead && !S.won && S.started && S.t0 && c.x < x + w && c.x + c.w > x && c.y < y + h && c.y + c.h > y) hit = { label, conf, b: [x, y, w, h], raw: b };
     }
   }
   if (!S.replay || S.replay.phase === 'done') drawChicken(c, now);
   vignette();
   if (hit) die(hit, v);
-  if (S.started && !S.dead && !S.won && c.y + c.h < S.road.top) win();
+  if (S.started && !S.dead && !S.won && S.axis && proj(c.x + c.w / 2, c.y + c.h / 2) > S.goal) win();
   $('hseg').textContent = 'seg ' + (S.segIdx + 1) + '/' + S.segments.length;
   $('htime').textContent = now.toFixed(1) + ' s';
   const bars = $('segbar').children; for (let i = 0; i < bars.length; i++) { bars[i].className = i < S.segIdx ? 'done' : i === S.segIdx ? 'cur' : ''; if (i === S.segIdx) bars[i].style.setProperty('--p', Math.round(v.currentTime / SEG_SEC * 100) + '%'); }
@@ -475,18 +525,20 @@ document.addEventListener('keydown', e => {
   if (e.key === 'c' || e.key === 'C') return beginCalibrate();
   if (e.key === 'Escape') return $('modal').classList.remove('on');
   if (!S || !S.started || S.dead || S.won || S.auto) return;
-  const c = S.chicken, step = (S.road.bottom - S.road.top) / 8; let moved = true;
-  if (e.key === 'ArrowUp') c.y -= step; else if (e.key === 'ArrowDown') c.y += step; else if (e.key === 'ArrowLeft') c.x -= 34; else if (e.key === 'ArrowRight') c.x += 34; else moved = false;
+  const c = S.chicken, a = S.axis, step = (a.pmax - a.pmin) / 8; let moved = true;
+  if (e.key === 'ArrowUp') { c.x += a.n[0] * step; c.y += a.n[1] * step; } else if (e.key === 'ArrowDown') { c.x -= a.n[0] * step; c.y -= a.n[1] * step; }
+  else if (e.key === 'ArrowLeft') { c.x -= a.d[0] * 34; c.y -= a.d[1] * 34; } else if (e.key === 'ArrowRight') { c.x += a.d[0] * 34; c.y += a.d[1] * 34; } else moved = false;
   if (moved) { e.preventDefault(); S.anim++; c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y)); if (!S.t0) S.t0 = performance.now(); }
 });
 function toggleBoxes() { showBoxes = !showBoxes; $('boxesBtn').classList.toggle('on', showBoxes); }
 $('start').onclick = () => start(false); $('auto').onclick = () => start(true); $('boxesBtn').onclick = toggleBoxes; $('calBtn').onclick = beginCalibrate;
-function beginCalibrate() { if (!S) return; calibrating = 1; toast('calibrate: click the TOP edge of the road on the video', 6000); }
+function beginCalibrate() { if (!S || !S.axis) return; calibrating = 1; toast('calibrate: click the NEAR edge of the road (where you start)', 6000); }
 cv.addEventListener('click', e => {
   if (!calibrating || !S) return;
   const r = cv.getBoundingClientRect(), y = Math.round((e.clientY - r.top) * H / r.height);
-  if (calibrating === 1) { S.road.top = y; calibrating = 2; toast('now click the BOTTOM edge of the road', 6000); }
-  else { S.road.bottom = Math.max(y, S.road.top + 60); calibrating = 0; localStorage.setItem('hop24.road.' + S.level.camera, JSON.stringify(S.road)); S.chicken.y = Math.min(H - 50, S.road.bottom + 4); toast('road band saved for ' + S.level.camera); }
+  const x = Math.round((e.clientX - r.left) * W / r.width), pv = proj(x, y);
+  if (calibrating === 1) { S.axis.pmin = pv; calibrating = 2; toast('now click the FAR edge of the road (where you want to arrive)', 6000); }
+  else { S.axis.pmax = Math.max(pv, S.axis.pmin + 60); calibrating = 0; localStorage.setItem('hop24.axis.' + S.level.camera, JSON.stringify(S.axis)); S.roadAuto = false; spawn(); toast('road edges saved for ' + S.level.camera); }
 });
 
 // ---------------------------------------------------------------- levels
