@@ -25,6 +25,10 @@ the agent cross on its own, using only the stored detections and no knowledge of
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey">
 </p>
 
+## Watch it (37 s)
+
+[**▶ Hop24-trailer.mp4**](docs/Hop24-trailer.mp4) — rendered at 30 fps from the real segments and their stored detections by [`docs/trailer.py`](docs/trailer.py): title, the crossing, the slow-motion kill-cam, the manhunt query, the incident report, and the agent crossing on its own. The [10-slide deck](docs/Hop24-deck.pptx) and the [3-minute presentation storyboard](docs/PRESENTATION.md) are in `docs/`.
+
 ## Play it
 
 | Where | URL |
