@@ -31,6 +31,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.environ.get("HOP24_RAW", "https://raw.githubusercontent.com/vnmoorthy/hop24/refs/heads/main/tools/hop24/")
 RELOAD_KEY = os.environ.get("HOP24_RELOAD_KEY", "hop")
 UPDATE_DIR = "/tmp/hop24"
+ASSET_DIRS = [os.path.dirname(os.path.abspath(__file__)), os.environ.get("HOP24_ASSETS", "/code"), "/code", UPDATE_DIR]
+
+
+def find_asset(name):
+    for d in ASSET_DIRS:
+        fp = os.path.join(d, name)
+        if os.path.exists(fp):
+            return fp
+    return None
 
 CAMERA_RE = re.compile(r"(scene\d+_p\d+c\d+)")
 SEG_RE = re.compile(r"_segment_(\d+)_of_(\d+)")
@@ -254,9 +263,16 @@ def build_query(label, cap):
 
 def investigate(label, cap, query=None):
     q = query or build_query(label, cap)
-    d = api("POST", "/search", body={"query": q, "top_k": 15, "llm_top_n": 0,
-                                     "min_similarity": 0.15, "include_public": True,
-                                     "metadata_filters": {"camera_id": "i24_cam-1"}})
+    full = {"query": q, "top_k": 15, "llm_top_n": 0, "min_similarity": 0.15, "include_public": True,
+            "metadata_filters": {"camera_id": "i24_cam-1"}}
+    try:
+        d = api("POST", "/search", body=full)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:300] if hasattr(e, "read") else ""
+        log("search 1st try failed", e.code, detail)
+        if e.code != 422:
+            raise
+        d = api("POST", "/search", body={"query": q, "top_k": 15, "metadata_filters": {"camera_id": "i24_cam-1"}})
     hits = []
     for r in d.get("results", []):
         src = r.get("source") or ""
@@ -496,12 +512,12 @@ class H(BaseHTTPRequestHandler):
                 n = int((q.get("n") or ["20"])[0])
                 return self._json({"scores": SCORES[-n:], "total": len(SCORES), "crossed": sum(1 for x in SCORES if x.get("result") == "crossed")})
             if p == "/sprite.png":
-                return self._file(os.path.join(HERE, "sprite.png"), "image/png")
+                return self._file(find_asset("sprite.png"), "image/png")
             if p == "/blood.png":
-                return self._file(os.path.join(HERE, "blood.png"), "image/png")
+                return self._file(find_asset("blood.png"), "image/png")
             if p == "/masks":
                 name = src.split("/")[-1].replace(".mp4", "")
-                fp = os.path.join(HERE, "masks__" + name + ".json")
+                fp = find_asset("masks__" + name + ".json") or os.path.join(HERE, "masks__" + name + ".json")
                 if MOCK and src.startswith("local://"):
                     import glob as _g
                     n = int(src[8:].replace("seg", "").replace(".mp4", ""))
@@ -509,8 +525,8 @@ class H(BaseHTTPRequestHandler):
                     fp = cands[0] if cands else fp
                 return self._file(fp, "application/json") if os.path.exists(fp) else self._json({"error": "no silhouettes for this segment"}, 404)
             if p == "/policy.json":
-                fp = os.path.join(HERE, "policy.json")
-                return self._file(fp, "application/json") if os.path.exists(fp) else self._json({"error": "no policy"}, 404)
+                fp = find_asset("policy.json")
+                return self._file(fp, "application/json") if fp else self._json({"error": "no policy"}, 404)
             if p == "/redescribe":
                 job = (q.get("job") or [""])[0]
                 if MOCK:
