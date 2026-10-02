@@ -357,7 +357,7 @@ function draw() {
       const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
       if (showBoxes) { ctx.strokeStyle = label === 'truck' || label === 'bus' ? 'rgba(255,140,66,.9)' : 'rgba(90,176,255,.85)'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
         ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y - 14, 7.2 * label.length + 8, 14); ctx.fillStyle = '#fff'; ctx.font = '11px ' + 'ui-monospace, Menlo, monospace'; ctx.fillText(label, x + 4, y - 3); }
-      if (!S.dead && !S.won && S.started && S.t0 && c.x < x + w && c.x + c.w > x && c.y < y + h && c.y + c.h > y) hit = { label, conf, b: [x, y, w, h], raw: b };
+      if (!S.dead && !S.won && S.started && S.t0 && hitsVehicle(c, x, y, w, h)) hit = { label, conf, b: [x, y, w, h], raw: b };
     }
   }
   if (!S.replay || S.replay.phase === 'done') drawChicken(c, now);
@@ -374,6 +374,13 @@ let vig = null;
 function vignette() {
   if (!vig) { vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95); vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,.45)'); }
   ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+}
+// A detection box is a loose rectangle; the vehicle fills roughly the inscribed ellipse. Test the chicken's body
+// points against that ellipse so brushing the empty corner of a box does not count as a hit.
+function hitsVehicle(c, x, y, w, h) {
+  const bx = x + w / 2, by = y + h / 2, rx = Math.max(6, w / 2 * 0.94), ry = Math.max(6, h / 2 * 0.94);
+  const pts = [[c.x + c.w / 2, c.y + c.h / 2], [c.x + c.w * 0.3, c.y + c.h * 0.3], [c.x + c.w * 0.7, c.y + c.h * 0.3], [c.x + c.w * 0.3, c.y + c.h * 0.7], [c.x + c.w * 0.7, c.y + c.h * 0.7]];
+  return pts.some(([px, py]) => ((px - bx) / rx) ** 2 + ((py - by) / ry) ** 2 <= 1);
 }
 function drawChicken(c, now) {
   const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
