@@ -273,6 +273,24 @@ currently on screen, never a future frame.
 It is not scripted: in testing the agent crossed `chunk_0003` in 2.2 s on one run and was killed by a semi
 (labelled `bus`, 74 %) at 2.4 s on another.
 
+## Collisions against the vehicle, not the box — FastSAM silhouettes
+
+A YOLO box is a loose rectangle; a chicken brushing its empty corner should not die. `tools/hop24/seg/masks.py`
+hands every stored box to **FastSAM** as a box prompt, matches the returned masks back to the boxes by overlap,
+simplifies each mask to a ≤14-point polygon and writes `masks__<segment>.json` (every 3rd frame, ~70 KB per 5 s
+segment). The page fetches them per segment (`GET /masks?source=`), shifts the nearest mask polygon by the box's
+motion since that frame, draws it in green under the box, and tests the chicken's body points against the
+polygon with a point-in-polygon test. Segments without silhouettes fall back to the inscribed ellipse of the box.
+The HUD shows `silhouettes · FastSAM` when they are loaded. `--detector rfdetr` swaps the archive boxes for
+RF-DETR detections if you want a second opinion on the vehicles.
+
+```bash
+python3 tools/hop24/seg/masks.py --video seg1.mp4 --boxes seg1.json --out tools/hop24/masks__<segment>.json --every 3
+```
+
+When a vehicle gets the chicken, the impact leaves a splatter and a stain on the road at the point of contact, and the
+evidence frame is re-taken once it settles.
+
 ## Learned autopilot — reinforcement learning, tracked in Weights & Biases
 
 The autopilot's policy is learned, not hand-written. `tools/hop24/rl/train.py` builds an offline simulator from the

@@ -362,7 +362,7 @@ def self_update():
     if not RAW:
         return None
     os.makedirs(UPDATE_DIR, exist_ok=True)
-    for f in ("main.py", "index.html", "sprite.png", "policy.json"):
+    for f in ("main.py", "index.html", "sprite.png", "policy.json", "blood.png"):
         with urllib.request.urlopen(RAW + f + "?t=" + str(int(time.time())), timeout=15) as r:
             data = r.read()
         with open(os.path.join(UPDATE_DIR, f), "wb") as fh:
@@ -495,6 +495,17 @@ class H(BaseHTTPRequestHandler):
                 return self._json({"scores": SCORES[-20:]})
             if p == "/sprite.png":
                 return self._file(os.path.join(HERE, "sprite.png"), "image/png")
+            if p == "/blood.png":
+                return self._file(os.path.join(HERE, "blood.png"), "image/png")
+            if p == "/masks":
+                name = src.split("/")[-1].replace(".mp4", "")
+                fp = os.path.join(HERE, "masks__" + name + ".json")
+                if MOCK and src.startswith("local://"):
+                    import glob as _g
+                    n = int(src[8:].replace("seg", "").replace(".mp4", ""))
+                    cands = sorted(_g.glob(os.path.join(HERE, "masks__*_segment_%03d_of_*.json" % n)))
+                    fp = cands[0] if cands else fp
+                return self._file(fp, "application/json") if os.path.exists(fp) else self._json({"error": "no silhouettes for this segment"}, 404)
             if p == "/policy.json":
                 fp = os.path.join(HERE, "policy.json")
                 return self._file(fp, "application/json") if os.path.exists(fp) else self._json({"error": "no policy"}, 404)

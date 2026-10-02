@@ -113,7 +113,7 @@
     <canvas id="cv" width="1280" height="720"></canvas>
     <div class="hud">
       <span class="pill acc" id="hcam">—</span><span class="pill" id="hseg">seg –</span><span class="pill" id="htime">0.0 s</span>
-      <span class="pill" id="hboxes">0 boxes</span><span class="pill" id="hfps"></span><span class="pill" id="hmode" style="display:none">AUTOPILOT</span>
+      <span class="pill" id="hboxes">0 boxes</span><span class="pill" id="hmask" style="display:none;color:var(--green)">silhouettes · FastSAM</span><span class="pill" id="hfps"></span><span class="pill" id="hmode" style="display:none">AUTOPILOT</span>
     </div>
     <div id="thought"></div>
     <div class="segbar" id="segbar"></div>
@@ -177,6 +177,7 @@ const cv = $('cv'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
 const kill = $('kill'), kctx = kill.getContext('2d');
 const vids = [mkVideo(), mkVideo()];
 const sprite = new Image(); sprite.src = BASE + 'sprite.png';
+const blood = new Image(); blood.src = BASE + 'blood.png';
 let S = null, levels = [], showBoxes = true, calibrating = 0, frames = 0, fpsT = performance.now(), toastT = 0, POLICY = null;
 api('policy.json').then(p => { POLICY = p && p.q ? p : null; if (POLICY) { const m = POLICY.meta || {}; $('hmode').textContent = 'AUTOPILOT · RL policy'; $('hmode').title = `Q-learning, ${m.episodes} episodes on ${m.chunks} chunks · crossed ${Math.round((m.eval || {}).crossed * 100)}% vs heuristic ${Math.round((m.baseline || {}).crossed * 100)}%` + (m.wandb_name ? ` · W&B run ${m.wandb_name}` : ''); } }).catch(() => {});
 
@@ -201,6 +202,11 @@ async function loadLevel(level, segments, opts = {}) {
   S.boxes = res.map(r => ({ ts: (r.frames || []).map(f => f.t), fr: r.frames || [], err: r.error }));
   if (res[0] && res[0].shape) S.shape = res[0].shape;
   autoRoad();
+  // vehicle silhouettes (FastSAM prompted by the stored boxes), when extracted for this segment
+  const mk = await Promise.all(segments.map(sg => api('masks?source=' + encodeURIComponent(sg)).catch(() => null)));
+  S.masks = mk.map(m => m && m.frames ? { ts: m.frames.map(f => f.time_sec), fr: m.frames } : null);
+  S.hasMasks = S.masks.some(Boolean);
+  $('hmask').style.display = S.hasMasks ? '' : 'none';
   const nb = res.reduce((a, r) => a + (r.count || 0), 0), bad = res.filter(r => r.error).length;
   $('hboxes').textContent = nb.toLocaleString() + ' boxes';
   $('introStatus').textContent = `${nb.toLocaleString()} detections across ${segments.length} segments` + (bad ? ` · ${bad} segment(s) have no detections` : '') + ' · road band ' + (S.roadAuto ? 'derived from the detections' : 'calibrated') + ' · press space';
@@ -260,7 +266,7 @@ function stopAll() { vids.forEach(v => { v.pause(); v.onended = null; }); }
 function start(auto = false) {
   if (!S) return;
   if (S.dead || S.won) return loadLevel(S.level, S.segments).then(() => start(auto));
-  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; S.hops = 0; vids.forEach(v => { v.playbackRate = 1; });
+  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; S.hops = 0; S.bloodT0 = 0; S.bloodShot = false; vids.forEach(v => { v.playbackRate = 1; });
   if (S.spawn) { S.chicken.x = S.spawn[0]; S.chicken.y = S.spawn[1]; }
   $('intro').classList.remove('on'); $('stage').classList.remove('shake');
   $('hmode').style.display = auto ? '' : 'none'; $('thought').classList.toggle('on', auto);
@@ -382,11 +388,14 @@ function draw() {
     for (const [label, conf, b] of fr.b) {
       if (label === 'person') continue;
       const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
+      const sil = S.hasMasks ? silhouette(label, b) : null, silC = sil && sil.map(([px, py]) => [px * sx, py * sy]);
       if (showBoxes) { ctx.strokeStyle = label === 'truck' || label === 'bus' ? 'rgba(255,140,66,.9)' : 'rgba(90,176,255,.85)'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
+        if (silC) { ctx.beginPath(); silC.forEach(([px, py], k) => k ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.closePath(); ctx.fillStyle = 'rgba(61,220,132,.16)'; ctx.fill(); ctx.strokeStyle = 'rgba(61,220,132,.9)'; ctx.lineWidth = 1.5; ctx.stroke(); }
         ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y - 14, 7.2 * label.length + 8, 14); ctx.fillStyle = '#fff'; ctx.font = '11px ' + 'ui-monospace, Menlo, monospace'; ctx.fillText(label, x + 4, y - 3); }
-      if (!S.dead && !S.won && S.started && S.t0 && hitsVehicle(c, x, y, w, h)) hit = { label, conf, b: [x, y, w, h], raw: b };
+      if (!S.dead && !S.won && S.started && S.t0 && hitsVehicle(c, x, y, w, h, silC)) hit = { label, conf, b: [x, y, w, h], raw: b };
     }
   }
+  if (S.dead && S.replay && S.replay.phase === 'done') drawBlood(c);
   if (!S.replay || S.replay.phase === 'done') drawChicken(c, now);
   vignette();
   if (hit) die(hit, v);
@@ -402,12 +411,58 @@ function vignette() {
   if (!vig) { vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95); vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,.45)'); }
   ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
 }
+function silhouette(label, b) {
+  const mk = S.masks && S.masks[S.segIdx]; if (!mk) return null;
+  const t = vids[S.active].currentTime, ts = mk.ts; let lo = 0, hi = ts.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (ts[m] < t) lo = m + 1; else hi = m; }
+  if (lo > 0 && Math.abs(ts[lo - 1] - t) < Math.abs(ts[lo] - t)) lo--;
+  const fr = mk.fr[lo]; if (!fr) return null;
+  let best = null, bs = 0.3;
+  for (const p of fr.polys) {
+    if (!p.poly || p.poly.length < 3) continue;
+    const q = p.bbox, ix = Math.max(0, Math.min(b[2], q[2]) - Math.max(b[0], q[0])), iy = Math.max(0, Math.min(b[3], q[3]) - Math.max(b[1], q[1]));
+    const inter = ix * iy, union = (b[2] - b[0]) * (b[3] - b[1]) + (q[2] - q[0]) * (q[3] - q[1]) - inter, iou = union > 0 ? inter / union : 0;
+    if (iou > bs) { bs = iou; best = p; }
+  }
+  if (!best) return null;
+  const dx = (b[0] + b[2]) / 2 - (best.bbox[0] + best.bbox[2]) / 2, dy = (b[1] + b[3]) / 2 - (best.bbox[1] + best.bbox[3]) / 2;
+  return best.poly.map(([x, y]) => [x + dx, y + dy]);
+}
+function inPoly(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
 // A detection box is a loose rectangle; the vehicle fills roughly the inscribed ellipse. Test the chicken's body
 // points against that ellipse so brushing the empty corner of a box does not count as a hit.
-function hitsVehicle(c, x, y, w, h) {
-  const bx = x + w / 2, by = y + h / 2, rx = Math.max(6, w / 2 * 0.94), ry = Math.max(6, h / 2 * 0.94);
+function hitsVehicle(c, x, y, w, h, poly) {
   const pts = [[c.x + c.w / 2, c.y + c.h / 2], [c.x + c.w * 0.3, c.y + c.h * 0.3], [c.x + c.w * 0.7, c.y + c.h * 0.3], [c.x + c.w * 0.3, c.y + c.h * 0.7], [c.x + c.w * 0.7, c.y + c.h * 0.7]];
+  if (poly) return pts.some(([px, py]) => inPoly(px, py, poly));          // the vehicle's real silhouette
+  const bx = x + w / 2, by = y + h / 2, rx = Math.max(6, w / 2 * 0.94), ry = Math.max(6, h / 2 * 0.94);
   return pts.some(([px, py]) => ((px - bx) / rx) ** 2 + ((py - by) / ry) ** 2 <= 1);
+}
+function drawBlood(c) {
+  if (!blood.complete || !blood.naturalWidth) return;
+  if (!S.bloodT0) { S.bloodT0 = performance.now(); S.bloodRot = Math.random() * Math.PI * 2; }
+  const age = (performance.now() - S.bloodT0) / 1000, f = Math.min(11, Math.floor(age * 22));
+  const size = c.w * 5.2, cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(S.bloodRot); ctx.globalAlpha = 0.95;
+  ctx.drawImage(blood, f * 160, 0, 160, 160, -size / 2, -size / 2, size, size); ctx.restore();
+  if (f >= 11 && !S.bloodShot && S.killer) { S.bloodShot = true; setTimeout(() => recrop(), 60); }
+}
+// re-take the evidence frame once the blood has settled, so the report shows the scene as it ended
+function recrop() {
+  const k = S.killer; if (!k || !k.cropBox) return;
+  const [cx, cy, cw, ch, x, y, w, h] = k.cropBox;
+  kctx.fillStyle = '#000'; kctx.fillRect(0, 0, kill.width, kill.height);
+  try { kctx.drawImage(cv, cx, cy, cw, ch, 0, 0, kill.width, kill.height); } catch (e) {}
+  kctx.strokeStyle = '#ff4d4d'; kctx.lineWidth = 3; kctx.strokeRect((x - cx) * kill.width / cw, (y - cy) * kill.height / ch, w * kill.width / cw, h * kill.height / ch);
+  kctx.fillStyle = 'rgba(0,0,0,.6)'; kctx.fillRect(0, kill.height - 22, kill.width, 22); kctx.fillStyle = '#fff'; kctx.font = '12px ui-monospace, Menlo, monospace';
+  kctx.fillText(`${k.camera} · seg ${k.seg} · t=${k.t.toFixed(2)}s · ${k.label} ${k.conf}`, 8, kill.height - 7);
+  k.crop = kill.toDataURL('image/jpeg', 0.85);
 }
 function drawChicken(c, now) {
   const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
@@ -437,7 +492,7 @@ function die(hit, v) {
   S.replay = { until: v.currentTime, label: hit.label, phase: 'playing', from: Math.max(0, v.currentTime - 2.4) };
   v.onended = null; v.currentTime = S.replay.from; v.playbackRate = 0.35; const rp = v.play(); if (rp && rp.catch) rp.catch(() => { S.replay.phase = 'done'; if (S.pendingBanner) { banner(...S.pendingBanner); S.pendingBanner = null; } });
   const src = S.segments[S.segIdx];
-  S.killer = { label: hit.label, conf: hit.conf, bbox: hit.raw, source: src, t: v.currentTime, seg: S.segIdx + 1, camera: S.level.camera, crop: kill.toDataURL('image/jpeg', 0.85), when: new Date().toISOString(), secs, auto: S.auto, hits: null, query: null, sql: null };
+  S.killer = { label: hit.label, conf: hit.conf, bbox: hit.raw, source: src, t: v.currentTime, seg: S.segIdx + 1, camera: S.level.camera, crop: kill.toDataURL('image/jpeg', 0.85), cropBox: [cx, cy, cw, ch, x, y, w, h], when: new Date().toISOString(), secs, auto: S.auto, hits: null, query: null, sql: null };
   $('facts').innerHTML = `<b>${esc(hit.label)}</b> · confidence ${hit.conf} · <b>${esc(S.level.camera)}</b> · segment ${S.segIdx + 1} at ${v.currentTime.toFixed(2)} s<br>bbox ${hit.raw.map(n => Math.round(n)).join(', ')} px · source …${esc(src.slice(-48))}`;
   $('cap').textContent = 'reading the stored description of this segment…';
   api('caption?source=' + encodeURIComponent(src)).then(r => { S.killer.caption = r.caption || ''; $('cap').textContent = r.caption ? '📼 ' + r.caption : '(no description stored for this segment)'; })
