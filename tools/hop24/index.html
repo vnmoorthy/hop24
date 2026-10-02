@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop 24</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#131a22; --line:#243040; --fg:#e8eef5; --dim:#8a98a8; --acc:#ffcc33; --red:#ff4d4d; --green:#3ddc84; --blue:#5ab0ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header { display:flex; gap:14px; align-items:center; padding:8px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { margin:0; font-size:20px; letter-spacing:2px; color:var(--acc); }
+  header h1 span { color:var(--dim); font-weight:normal; font-size:12px; letter-spacing:0; margin-left:8px; }
+  select, button, input { background:#1b2430; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 9px; font:inherit; }
+  button { cursor:pointer; } button:hover { border-color:var(--acc); } button:disabled { opacity:.4; cursor:default; }
+  button.primary { background:var(--acc); color:#000; font-weight:bold; }
+  main { display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:12px; padding:12px 14px; }
+  #stage { position:relative; background:#000; border:1px solid var(--line); border-radius:8px; overflow:hidden; aspect-ratio:16/9; }
+  #cv { width:100%; height:100%; display:block; }
+  #stage.shake { animation: shake .45s; }
+  @keyframes shake { 0%,100%{transform:translate(0,0)} 20%{transform:translate(-12px,6px)} 40%{transform:translate(10px,-8px)} 60%{transform:translate(-8px,4px)} 80%{transform:translate(6px,-3px)} }
+  #hud { position:absolute; left:10px; top:8px; display:flex; gap:10px; font-size:13px; }
+  #hud span { background:rgba(0,0,0,.55); padding:3px 8px; border-radius:4px; }
+  #banner { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:8px; background:rgba(0,0,0,.35); text-align:center; }
+  #banner.on { display:flex; }
+  #banner .big { font-size:72px; font-weight:900; letter-spacing:6px; text-shadow:0 4px 24px #000; }
+  #banner .sub { font-size:16px; background:rgba(0,0,0,.6); padding:6px 12px; border-radius:6px; }
+  aside { display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .box h2 { margin:0 0 8px; font-size:12px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; }
+  #kill { width:100%; aspect-ratio:4/3; background:#000; border-radius:6px; display:block; }
+  .facts { font-size:12px; color:var(--dim); margin-top:6px; }
+  .facts b { color:var(--fg); }
+  .cap { font-size:12px; margin-top:6px; max-height:90px; overflow:auto; color:#c9d4e0; }
+  .hits { display:flex; flex-direction:column; gap:6px; margin-top:6px; max-height:260px; overflow:auto; }
+  .hit { display:grid; grid-template-columns: 92px 1fr auto; gap:8px; align-items:center; font-size:12px; border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
+  .hit .cam { color:var(--blue); font-weight:bold; }
+  .hit .sc { color:var(--acc); }
+  .hit .cp { color:var(--dim); grid-column: 1 / -1; }
+  pre { font-size:10px; color:#9fb3c8; white-space:pre-wrap; max-height:120px; overflow:auto; margin:6px 0 0; }
+  #status { color:var(--dim); font-size:12px; padding:0 14px 10px; }
+  .scores { font-size:12px; } .scores div { display:flex; justify-content:space-between; border-bottom:1px dashed var(--line); padding:2px 0; }
+  kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:11px; color:var(--fg); }
+  @media (max-width:900px){ main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>HOP 24 <span>cross a real highway. the archive is watching.</span></h1>
+  <select id="level"></select>
+  <button id="start" class="primary">Start (space)</button>
+  <button id="boxesBtn">Boxes: on (B)</button>
+  <button id="calBtn">Calibrate road (C)</button>
+  <input id="name" placeholder="player name" size="12">
+</header>
+<main>
+  <div id="stage">
+    <canvas id="cv" width="1280" height="720"></canvas>
+    <div id="hud"><span id="hcam">-</span><span id="hseg">seg -</span><span id="htime">0.0 s</span><span id="hfps"></span></div>
+    <div id="banner"><div class="big" id="bigtxt"></div><div class="sub" id="subtxt"></div></div>
+  </div>
+  <aside>
+    <div class="box">
+      <h2>Kill-cam</h2>
+      <canvas id="kill" width="320" height="240"></canvas>
+      <div class="facts" id="facts">No incident yet. Arrow keys to hop. Reach the top shoulder.</div>
+      <div class="cap" id="cap"></div>
+      <div style="margin-top:8px; display:flex; gap:6px;">
+        <button id="inv" disabled>Find my killer across cameras</button>
+      </div>
+    </div>
+    <div class="box" id="manhunt" style="display:none">
+      <h2>Manhunt — one query, every camera</h2>
+      <div class="facts">query: <b id="qtxt"></b></div>
+      <div class="hits" id="hits"></div>
+      <details><summary style="cursor:pointer;color:var(--dim);font-size:12px">VastDB query</summary><pre id="sql"></pre></details>
+    </div>
+    <div class="box">
+      <h2>Scoreboard</h2>
+      <div class="scores" id="scores"></div>
+    </div>
+  </aside>
+</main>
+<div id="status">loading…</div>
+
+<script>
+(() => {
+const BASE = location.pathname.endsWith('/') ? location.pathname : location.pathname + '/';
+const $ = id => document.getElementById(id);
+const api = (p, opt) => fetch(BASE + p, opt).then(r => { if (!r.ok) throw new Error(p + ' -> ' + r.status); return r.json(); });
+const post = (p, body) => api(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+const cv = $('cv'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+const kill = $('kill'), kctx = kill.getContext('2d');
+const vids = [mkVideo(), mkVideo()];
+let S = null;            // current session state
+let levels = [];
+let showBoxes = true;
+let calibrating = 0;     // 0 none, 1 waiting top, 2 waiting bottom
+let frames = 0, fpsT = performance.now();
+
+function mkVideo() {
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
+  return v;
+}
+function status(t) { $('status').textContent = t; }
+function roadFor(camera) {
+  try { const r = JSON.parse(localStorage.getItem('hop24.road.' + camera)); if (r && r.top < r.bottom) return r; } catch (e) {}
+  return { top: Math.round(H * 0.22), bottom: Math.round(H * 0.92) };
+}
+
+function newSession(level, segments) {
+  const road = roadFor(level.camera);
+  S = {
+    level, segments, segIdx: 0, active: 0, boxes: [], shape: [1080, 1920],
+    road, chicken: { w: 30, h: 30, x: W / 2 - 15, y: 0 }, moved: false, t0: 0, dead: false, won: false, killer: null, started: false,
+  };
+  S.chicken.y = Math.min(H - 36, road.bottom + 6);
+  $('hcam').textContent = level.camera + ' · ' + level.filename.replace(/^\d+_\d+_/, '');
+}
+
+async function loadLevel(level, segments) {
+  if (S && S.started) stopAll();
+  newSession(level, segments);
+  status('loading boxes for ' + segments.length + ' segments…');
+  const res = await Promise.all(segments.map(s => api('boxes?source=' + encodeURIComponent(s)).catch(e => ({ frames: [], shape: [1080, 1920], error: String(e) }))));
+  S.boxes = res.map(r => { const fr = r.frames || []; return { ts: fr.map(f => f.t), fr, err: r.error }; });
+  if (res[0] && res[0].shape) S.shape = res[0].shape;
+  const nb = res.reduce((a, r) => a + (r.count || 0), 0);
+  const bad = res.filter(r => r.error).length;
+  status(`boxes loaded: ${nb} detections across ${segments.length} segments` + (bad ? ` (${bad} segment(s) without detections)` : '') + `. format ${res[0] && res[0].format || '?'}. Press Start.`);
+  vids[0].src = BASE + 'stream?source=' + encodeURIComponent(segments[0]);
+  vids[0].load();
+  if (segments[1]) { vids[1].src = BASE + 'stream?source=' + encodeURIComponent(segments[1]); vids[1].load(); }
+  banner('', '');
+  draw();
+}
+
+function stopAll() { vids.forEach(v => { v.pause(); v.onended = null; }); }
+
+function start() {
+  if (!S) return;
+  if (S.dead || S.won) { return loadLevel(S.level, S.segments).then(start); }
+  S.started = true; S.t0 = 0; S.moved = false;
+  $('stage').classList.remove('shake');
+  $('inv').disabled = true; $('manhunt').style.display = 'none';
+  $('facts').textContent = 'Go. Arrow keys to hop; reach the top shoulder.'; $('cap').textContent = '';
+  kctx.clearRect(0, 0, kill.width, kill.height);
+  playSeg(0);
+}
+
+function playSeg(i) {
+  const v = vids[i % 2];
+  S.segIdx = i; S.active = i % 2;
+  v.onended = () => { if (S.segIdx + 1 < S.segments.length) playSeg(S.segIdx + 1); else endLevel(); };
+  const p = v.play(); if (p && p.catch) p.catch(e => status('play blocked: ' + e.message + ' — click Start again'));
+  // preload the one after next into the other element
+  const nxt = i + 1, other = vids[(i + 1) % 2];
+  if (S.segments[nxt] && !other.src.endsWith(encodeURIComponent(S.segments[nxt]))) { other.src = BASE + 'stream?source=' + encodeURIComponent(S.segments[nxt]); other.load(); }
+}
+
+function endLevel() {
+  if (S.dead || S.won) return;
+  S.won = false; S.dead = false;
+  banner('TIME', 'the clip ran out. Space to retry.');
+  stopAll();
+}
+
+function curFrame() {
+  const v = vids[S.active], seg = S.boxes[S.segIdx];
+  if (!seg || !seg.fr.length) return null;
+  const t = v.currentTime, ts = seg.ts;
+  let lo = 0, hi = ts.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (ts[m] < t) lo = m + 1; else hi = m; }
+  if (lo > 0 && Math.abs(ts[lo - 1] - t) < Math.abs(ts[lo] - t)) lo--;
+  return seg.fr[lo];
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  if (!S) return;
+  const v = vids[S.active];
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  if (v.readyState >= 2) ctx.drawImage(v, 0, 0, W, H);
+  const sx = W / S.shape[1], sy = H / S.shape[0];
+  // road band guide
+  ctx.strokeStyle = 'rgba(255,204,51,.35)'; ctx.setLineDash([8, 8]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, S.road.top); ctx.lineTo(W, S.road.top); ctx.moveTo(0, S.road.bottom); ctx.lineTo(W, S.road.bottom); ctx.stroke(); ctx.setLineDash([]);
+  const fr = S.started ? curFrame() : null;
+  const c = S.chicken;
+  let hit = null;
+  if (fr) {
+    for (const [label, conf, b] of fr.b) {
+      if (label === 'person') continue;
+      const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
+      if (showBoxes) { ctx.strokeStyle = label === 'truck' || label === 'bus' ? '#ff8c42' : '#5ab0ff'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h); }
+      if (!S.dead && !S.won && S.started && c.x < x + w && c.x + c.w > x && c.y < y + h && c.y + c.h > y) hit = { label, conf, b: [x, y, w, h], raw: b };
+    }
+  }
+  // chicken
+  ctx.font = '30px serif'; ctx.textBaseline = 'top';
+  ctx.fillText(S.dead ? '💥' : '🐔', c.x - 2, c.y - 4);
+  if (hit) die(hit, v);
+  if (S.started && !S.dead && !S.won && c.y + c.h < S.road.top) win();
+  // hud
+  $('hseg').textContent = 'seg ' + (S.segIdx + 1) + '/' + S.segments.length;
+  $('htime').textContent = (S.segIdx * 5 + v.currentTime).toFixed(1) + ' s';
+  if (++frames % 30 === 0) { const n = performance.now(); $('hfps').textContent = Math.round(30000 / (n - fpsT)) + ' fps'; fpsT = n; }
+}
+
+function die(hit, v) {
+  S.dead = true; stopAll();
+  $('stage').classList.add('shake');
+  const secs = S.t0 ? ((performance.now() - S.t0) / 1000).toFixed(1) : '0.0';
+  banner('SPLAT', `killed by a ${hit.label} (${Math.round(hit.conf * 100)}% sure) after ${secs} s · Space to retry`);
+  // kill-cam crop from the frozen frame
+  const [x, y, w, h] = hit.b, pad = 40;
+  const cx = Math.max(0, x - pad), cy = Math.max(0, y - pad), cw = Math.min(W - cx, w + 2 * pad), ch = Math.min(H - cy, h + 2 * pad);
+  kctx.fillStyle = '#000'; kctx.fillRect(0, 0, kill.width, kill.height);
+  try { kctx.drawImage(cv, cx, cy, cw, ch, 0, 0, kill.width, kill.height); } catch (e) {}
+  kctx.strokeStyle = '#ff4d4d'; kctx.lineWidth = 3;
+  kctx.strokeRect((x - cx) * kill.width / cw, (y - cy) * kill.height / ch, w * kill.width / cw, h * kill.height / ch);
+  const src = S.segments[S.segIdx];
+  S.killer = { label: hit.label, conf: hit.conf, bbox: hit.raw, source: src, t: v.currentTime, camera: S.level.camera };
+  $('facts').innerHTML = `<b>${hit.label}</b> · conf ${hit.conf} · ${S.level.camera} · segment ${S.segIdx + 1} at ${v.currentTime.toFixed(2)} s<br>bbox ${hit.raw.map(n => Math.round(n)).join(', ')} (video px)`;
+  $('cap').textContent = 'fetching the archive caption for this segment…';
+  api('caption?source=' + encodeURIComponent(src)).then(r => { S.killer.caption = r.caption || ''; $('cap').textContent = r.caption ? '📼 ' + r.caption : '(no caption stored for this segment)'; $('inv').disabled = false; })
+    .catch(e => { $('cap').textContent = 'caption unavailable: ' + e.message; $('inv').disabled = false; });
+  post('score', { name: $('name').value || 'anon', result: 'splat:' + hit.label, seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
+}
+
+function win() {
+  S.won = true; stopAll();
+  const secs = ((performance.now() - S.t0) / 1000).toFixed(1);
+  banner('CROSSED', `${secs} s · Space to play again`);
+  post('score', { name: $('name').value || 'anon', result: 'crossed', seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
+}
+
+function banner(big, sub) {
+  $('bigtxt').textContent = big; $('subtxt').textContent = sub;
+  $('bigtxt').style.color = big === 'SPLAT' ? 'var(--red)' : big === 'CROSSED' ? 'var(--green)' : 'var(--acc)';
+  $('banner').classList.toggle('on', !!big);
+}
+
+function renderScores(list) {
+  $('scores').innerHTML = (list || []).slice().reverse().map(s => `<div><span>${esc(s.name)} · ${esc(s.result)}</span><span>${s.seconds}s</span></div>`).join('') || '<div><span>no runs yet</span></div>';
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// --- manhunt
+$('inv').onclick = async () => {
+  if (!S || !S.killer) return;
+  $('inv').disabled = true; $('manhunt').style.display = 'block';
+  $('qtxt').textContent = 'searching…'; $('hits').innerHTML = ''; $('sql').textContent = '';
+  try {
+    const r = await post('investigate', { label: S.killer.label, caption: S.killer.caption || '' });
+    $('qtxt').textContent = r.query;
+    $('sql').textContent = r.sql || '(no sql returned)';
+    const groups = {};
+    for (const h of r.hits) (groups[h.camera] = groups[h.camera] || []).push(h);
+    const cams = Object.keys(groups).sort();
+    $('hits').innerHTML = cams.map(cam => groups[cam].slice(0, 3).map(h => `
+      <div class="hit"><span class="cam">${esc(cam)}${cam === S.killer.camera ? ' (same cam)' : ''}</span><span class="sc">score ${h.score}</span>
+      <button data-src="${esc(h.source)}" data-cam="${esc(cam)}">watch</button><span class="cp">${esc(h.caption.slice(0, 160))}…</span></div>`).join('')).join('') || '<div class="facts">no matching segments</div>';
+    $('hits').querySelectorAll('button').forEach(b => b.onclick = () => {
+      const lvl = { camera: b.dataset.cam, filename: b.dataset.src.split('/').pop() };
+      loadLevel(lvl, [b.dataset.src]).then(() => { S.started = true; playSeg(0); banner('', ''); });
+    });
+    status(`manhunt: ${r.hits.length} candidate sightings across ${cams.length} camera(s)`);
+  } catch (e) { $('qtxt').textContent = 'search failed: ' + e.message; }
+  $('inv').disabled = false;
+};
+
+// --- input
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); return start(); }
+  if (e.key === 'r' || e.key === 'R') return start();
+  if (e.key === 'b' || e.key === 'B') { showBoxes = !showBoxes; $('boxesBtn').textContent = 'Boxes: ' + (showBoxes ? 'on' : 'off') + ' (B)'; return; }
+  if (e.key === 'c' || e.key === 'C') return beginCalibrate();
+  if (!S || !S.started || S.dead || S.won) return;
+  const c = S.chicken, step = (S.road.bottom - S.road.top) / 8;
+  let moved = true;
+  if (e.key === 'ArrowUp') c.y -= step; else if (e.key === 'ArrowDown') c.y += step;
+  else if (e.key === 'ArrowLeft') c.x -= 28; else if (e.key === 'ArrowRight') c.x += 28; else moved = false;
+  if (moved) { e.preventDefault(); c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y)); if (!S.t0) S.t0 = performance.now(); }
+});
+$('start').onclick = start;
+$('boxesBtn').onclick = () => { showBoxes = !showBoxes; $('boxesBtn').textContent = 'Boxes: ' + (showBoxes ? 'on' : 'off') + ' (B)'; };
+$('calBtn').onclick = beginCalibrate;
+function beginCalibrate() { if (!S) return; calibrating = 1; status('calibrate: click the TOP edge of the road on the video'); }
+cv.addEventListener('click', e => {
+  if (!calibrating || !S) return;
+  const r = cv.getBoundingClientRect(); const y = Math.round((e.clientY - r.top) * H / r.height);
+  if (calibrating === 1) { S.road.top = y; calibrating = 2; status('now click the BOTTOM edge of the road'); }
+  else { S.road.bottom = Math.max(y, S.road.top + 40); calibrating = 0; localStorage.setItem('hop24.road.' + S.level.camera, JSON.stringify(S.road)); S.chicken.y = Math.min(H - 36, S.road.bottom + 6); status('road saved for ' + S.level.camera); }
+});
+
+// --- levels
+$('level').onchange = () => { const l = levels[+$('level').value]; if (l) loadLevel(l, l.segments); };
+api('levels').then(r => {
+  levels = r.levels || [];
+  if (!levels.length) { status('no I-24 levels found in the archive'); return; }
+  $('level').innerHTML = levels.map((l, i) => `<option value="${i}">${esc(l.camera)} · ${esc(l.filename.replace(/^\d+_\d+_scene\d+_p\d+c\d+_/, ''))} · ${l.n} seg</option>`).join('');
+  let pick = levels.findIndex(l => /p1c2_chunk_0003/.test(l.filename)); if (pick < 0) pick = 0;
+  $('level').value = pick;
+  return loadLevel(levels[pick], levels[pick].segments);
+}).catch(e => status('levels failed: ' + e.message));
+api('scores').then(r => renderScores(r.scores)).catch(() => {});
+})();
+</script>
+</body>
+</html>
