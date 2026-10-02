@@ -34,12 +34,35 @@ UPDATE_DIR = "/tmp/hop24"
 ASSET_DIRS = [os.path.dirname(os.path.abspath(__file__)), os.environ.get("HOP24_ASSETS", "/code"), "/code", UPDATE_DIR]
 
 
+_asset_index = {}
+
+
+def _index_assets():
+    """Locate the ConfigMap mount after a self-update: shallow walk of the filesystem for our files."""
+    if _asset_index:
+        return
+    roots = ["/code", "/app", "/srv", "/opt", "/workspace", "/mnt", "/data", "/home", "/tmp", "/etc/hop24", "/"]
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        base_depth = root.rstrip("/").count("/")
+        for dp, dns, fns in os.walk(root):
+            if dp.count("/") - base_depth >= 3 or dp.startswith(("/proc", "/sys", "/dev", "/usr", "/lib", "/var/lib", "/bin", "/sbin")):
+                dns[:] = []
+                continue
+            for fn in fns:
+                if fn.startswith("masks__") or fn in ("sprite.png", "blood.png", "policy.json", "index.html"):
+                    _asset_index.setdefault(fn, os.path.join(dp, fn))
+    log("asset index:", len(_asset_index), "files; masks at", os.path.dirname(next((v for k, v in _asset_index.items() if k.startswith("masks__")), "none")))
+
+
 def find_asset(name):
     for d in ASSET_DIRS:
         fp = os.path.join(d, name)
         if os.path.exists(fp):
             return fp
-    return None
+    _index_assets()
+    return _asset_index.get(name)
 
 CAMERA_RE = re.compile(r"(scene\d+_p\d+c\d+)")
 SEG_RE = re.compile(r"_segment_(\d+)_of_(\d+)")
@@ -272,7 +295,10 @@ def investigate(label, cap, query=None):
         log("search 1st try failed", e.code, detail)
         if e.code != 422:
             raise
-        d = api("POST", "/search", body={"query": q, "top_k": 15, "metadata_filters": {"camera_id": "i24_cam-1"}})
+        try:
+            d = api("POST", "/search", body={"query": q, "top_k": 15, "metadata_filters": {"camera_id": "i24_cam-1"}})
+        except urllib.error.HTTPError as e2:
+            raise RuntimeError(f"search {e2.code}: {detail} // retry {e2.code}: {e2.read().decode(errors='replace')[:300]}")
     hits = []
     for r in d.get("results", []):
         src = r.get("source") or ""
@@ -487,7 +513,9 @@ class H(BaseHTTPRequestHandler):
             if p == "/":
                 return self._file(os.path.join(HERE, "index.html"), "text/html; charset=utf-8")
             if p == "/health":
-                return self._json({"status": "ok", "mock": MOCK, "file": __file__})
+                _index_assets()
+                return self._json({"status": "ok", "mock": MOCK, "file": __file__, "masks": sum(1 for k in _asset_index if k.startswith("masks__")),
+                                   "assets_dir": os.path.dirname(next((v for k, v in _asset_index.items() if k.startswith("masks__")), ""))})
             if p == "/levels":
                 return self._json({"levels": mock_levels() if MOCK else levels()})
             src = (q.get("source") or [""])[0]
