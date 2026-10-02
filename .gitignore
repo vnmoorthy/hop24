@@ -1,2 +1,3 @@
 tools/hop24/rl/wandb/debug*.log
 tools/hop24/rl/wandb/latest-run
+*.pt
