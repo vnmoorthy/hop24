@@ -27,7 +27,7 @@ VSS_PASS = os.environ.get("VSS_PASSWORD", "")
 API = VSS_URL + "/api/v1"
 MOCK = os.environ.get("HOP24_MOCK") == "1"
 HERE = os.path.dirname(os.path.abspath(__file__))
-RAW = os.environ.get("HOP24_RAW", "https://raw.githubusercontent.com/vnmoorthy/hop24/main/tools/hop24/")
+RAW = os.environ.get("HOP24_RAW", "https://raw.githubusercontent.com/vnmoorthy/hop24/refs/heads/main/tools/hop24/")
 RELOAD_KEY = os.environ.get("HOP24_RELOAD_KEY", "hop")
 UPDATE_DIR = "/tmp/hop24"
 
