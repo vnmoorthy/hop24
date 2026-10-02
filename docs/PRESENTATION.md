@@ -1,9 +1,9 @@
 # Hop 24 — 3-minute presentation storyboard
 
 10 slides, 3:00 total. Slides 3, 4, 6, 7 and 9 are LIVE in the app; everything else is a static slide.
-Every number below comes from the live team-10 archive or the code in `tools/hop24/` and `blender/chicken.py`. Do not inflate them on stage.
+Every number below comes from the live team-10 archive or the code in `tools/hop24/`. Do not inflate them on stage.
 
-A note on "real video": the stage footage in Hop 24 is real I-24 Nashville camera video streamed from the VAST archive, not an animation. The only rendered element is the chicken (a Blender/Eevee sprite sheet). Say this out loud on slide 3 — it is the single biggest "wait, really?" moment and it is true.
+A note on "real video": the stage footage in Hop 24 is real I-24 Nashville camera video streamed from the VAST archive, not an animation. The only drawn element is the chicken sprite. Say this out loud on slide 3 — it is the single biggest "wait, really?" moment and it is true.
 
 Timing budget (speak at ~165 wpm; this is brisk, so rehearse with a timer):
 
@@ -17,7 +17,7 @@ Timing budget (speak at ~165 wpm; this is brisk, so rehearse with a timer):
 | 6 | Manhunt | 1:32-1:54 | LIVE |
 | 7 | Incident report | 1:54-2:10 | LIVE |
 | 8 | Sharpen the archive / re-describe | 2:10-2:26 | slide (+ one optional click) |
-| 9 | Autopilot + Blender | 2:26-2:44 | LIVE |
+| 9 | Autopilot | 2:26-2:44 | LIVE |
 | 10 | Architecture + next | 2:44-3:00 | slide |
 
 ---
@@ -144,16 +144,16 @@ Optional live click if the pre-run completed in this tab: click "Re-read caption
 
 ---
 
-## Slide 9 — Autopilot + Blender  (2:26-2:44)  LIVE
+## Slide 9 — Autopilot  (2:26-2:44)  LIVE
 
-**On screen:** Back in the app on the same chunk. Press `A`. The "AUTOPILOT" pill lights up, the thought line shows the agent's reasoning live ("watching the traffic to estimate speeds…", "next lane clear for 0.65 s → hop", "hold · truck crossing the next lane at N px/s, there in 0.4s", "dodge back …"). It crosses, or it dies; both are fine. Small corner inset on the slide: `chicken_sheet.png` (8-frame hop cycle + splat, Blender Eevee, 256 px, headless `blender/chicken.py`).
+**On screen:** Back in the app on the same chunk. Press `A`. The "AUTOPILOT" pill lights up, the thought line shows the agent's reasoning live ("watching the traffic to estimate speeds…", "next lane clear for 0.65 s → hop", "hold · truck crossing the next lane at N px/s, there in 0.4s", "dodge back …"). It crosses, or it dies; both are fine.
 
 **Spoken (60 words):**
-"Last thing. Press A and the agent crosses by itself. No peeking at future frames: it matches boxes between consecutive frames to estimate each vehicle's speed, and hops only if nothing is predicted into the next lane within point six five seconds. You can read its reasoning live. In testing it crossed in 2.2 seconds; another run a semi got it at 2.4. It is honest, not scripted."
+"Last thing. Press A and the agent crosses by itself — with a policy it learned. We built a simulator from the archive's own detections of all thirty clips and trained it with Q-learning, every run logged to Weights and Biases. No peeking at future frames: it only sees the boxes up to now. Learned beats rule-based: 41 versus 39 percent of random starts overall, and 46 versus 31 on this camera. It still dies sometimes. That is the proof."
 
 **Gesture / click:** Press `A` on "press A". Point at the thought line on "read its reasoning live". If it dies, say "see, honest" and move on; do not retry.
 
-**Fallback:** If the stream will not play, show `docs/img/crossed.jpg` (the CROSSED banner from a real autopilot run) and read the same words. Mention the Blender chicken only if asked; it is on the slide inset.
+**Fallback:** If the stream will not play, show `docs/img/crossed.jpg` (the CROSSED banner from a real autopilot run) and read the same words.
 
 ---
 
@@ -186,7 +186,7 @@ Side labels: Cosmos3-Reason captions, Cosmos Embed1 vectors, YOLO11s boxes, Data
 8. **Sound off** on the laptop (system mute). The app has no audio, but the venue mic will pick up notifications.
 9. **Boxes ON** (the "Boxes" button should be lit; press `B` if not). Judges need to see the detections to believe slide 3.
 10. **One dry run:** space, hop, die, "Find my killer", "File incident report", Escape, `A`. Confirm the manhunt returns hits and the SQL expands. Press `R` to reset. Then leave the intro overlay up for slide 3.
-11. **Fallback images open in a viewer**, in this order: `intro.jpg`, `splat.jpg`, `replay.jpg`, `manhunt.jpg`, `report.jpg`, `crossed.jpg`, `chicken_sheet.png` (all in `docs/img/`).
+11. **Fallback images open in a viewer**, in this order: `intro.jpg`, `splat.jpg`, `replay.jpg`, `manhunt.jpg`, `report.jpg`, `crossed.jpg`, (all in `docs/img/`).
 12. Close every other tab, notifications off, Do Not Disturb on, power connected.
 
 ---
@@ -206,7 +206,7 @@ Everything we read lives in VAST: the 5-second segments in S3, the per-segment r
 Because a collision is a concrete, timestamped event with a known vehicle, and the room understands it in two seconds. The game is the staging; the agent's work starts after the hit: read the caption, search every camera, file the report, sharpen the archive. The same loop applies to any trigger event in the footage. It also forced us to use the stored detections as physics, which is a stress test of the archive's quality on every frame.
 
 **What about W&B?**
-Honest answer: Hop 24 does not call W&B Inference or Weave today. The agent reads what the pipeline already produced (Cosmos captions, Embed1 vectors, YOLO boxes). The obvious next step is letting an LLM write the investigator prompt and the report narrative per incident, and tracing those calls in Weave; the hook is one POST in `main.py`.
+The autopilot policy is trained with Q-learning on a simulator built from the stored detections, and every training run is logged to Weights & Biases (crossing/death rates, reward, evaluations, the exported policy as an artifact). The app does not call W&B Inference or Weave at runtime; the next step is letting an LLM write the investigator prompt and the report narrative per incident and tracing those calls in Weave.
 
 **Did the crash actually happen in the footage?**
 No. There are no crashes in the dataset. The hit-and-run framing is a scenario built around a real detection at a real timestamp; the chicken is the only fiction.
@@ -217,5 +217,3 @@ One pole, three cameras (p1c1, p1c2, p1c3), ten 30-second chunks each, 30 fps, 1
 **How heavy are the detections?**
 150 frames per 5-second segment; about 1,430 boxes in one segment and 9,294 across one 30-second chunk. Classes seen: car, truck, bus (semis sometimes read as "bus", which is why the autopilot is label-agnostic).
 
-**Why Blender for the chicken?**
-Headless `blender/chicken.py` renders an 8-frame hop cycle plus a splat frame with Eevee at 256 px, transparent background, soft shadow. It is the one rendered thing on screen; everything else is real video and real detections.

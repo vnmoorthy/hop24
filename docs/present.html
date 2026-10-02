@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop 24 — presentation</title>
+<style>
+  :root { --bg:#070a0f; --fg:#e9eef6; --dim:#8b9bb0; --acc:#ffcc33; --red:#ff4d4d; --green:#3ddc84; --blue:#5ab0ff; --orange:#ff8c42; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; --sans: -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif; }
+  * { box-sizing:border-box; } html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans); overflow:hidden; }
+  .deck { position:relative; width:100vw; height:100vh; }
+  .slide { position:absolute; inset:0; isolation:isolate; display:flex; flex-direction:column; justify-content:center; padding:7vh 8vw; opacity:0; visibility:hidden; transform:translateY(12px); transition:opacity .45s ease, transform .45s ease, visibility 0s linear .45s; }
+  .slide.on { opacity:1; visibility:visible; transform:none; transition:opacity .5s ease, transform .5s ease, visibility 0s; }
+  .bgvid, .bgimg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:-2; }
+  .shade { position:absolute; inset:0; background:linear-gradient(90deg, rgba(7,10,15,.92) 0%, rgba(7,10,15,.6) 55%, rgba(7,10,15,.25) 100%); z-index:-1; }
+  .kicker { font:700 2vh var(--mono); letter-spacing:.4em; color:var(--acc); text-transform:uppercase; margin-bottom:1.6vh; }
+  h1 { font:900 11vh/1 var(--mono); letter-spacing:.06em; margin:0 0 2vh; color:var(--acc); text-shadow:0 0 40px rgba(255,204,51,.35); }
+  h2 { font:800 6.2vh/1.1 var(--sans); margin:0 0 3vh; max-width:70vw; letter-spacing:-.01em; }
+  p, li { font-size:3vh; line-height:1.4; color:#d8e2ee; max-width:62vw; }
+  .sub { font-size:3.4vh; color:var(--fg); }
+  .dim { color:var(--dim); } .mono { font-family:var(--mono); }
+  .row { display:flex; gap:3vw; align-items:stretch; }
+  .col { flex:1; min-width:0; }
+  /* builds */
+  .b { opacity:0; transform:translateY(18px); transition:opacity .55s ease, transform .55s ease; }
+  .on .b { opacity:1; transform:none; }
+  .on .b:nth-child(1), .on .d1 { transition-delay:.15s } .on .b:nth-child(2), .on .d2 { transition-delay:.45s } .on .b:nth-child(3), .on .d3 { transition-delay:.75s } .on .b:nth-child(4), .on .d4 { transition-delay:1.05s } .on .b:nth-child(5), .on .d5 { transition-delay:1.35s } .on .b:nth-child(6), .on .d6 { transition-delay:1.65s }
+  /* stat tiles */
+  .stats { display:flex; gap:2vw; margin:3vh 0; }
+  .stat { flex:1; background:rgba(17,24,35,.85); border:1px solid #223042; border-radius:1.6vh; padding:3vh 2.4vw; }
+  .stat .n { font:900 8vh/1 var(--mono); color:var(--acc); } .stat .l { font-size:2.2vh; color:var(--dim); margin-top:1vh; }
+  /* pipeline */
+  .pipe { display:flex; align-items:center; gap:1.2vw; margin:4vh 0; }
+  .node { background:#111823; border:2px solid #223042; border-radius:1.4vh; padding:2.4vh 1.6vw; font:700 2.3vh var(--mono); text-align:center; min-width:11vw; transition:border-color .4s, box-shadow .4s, transform .4s; }
+  .node small { display:block; font:400 1.7vh var(--sans); color:var(--dim); margin-top:.6vh; }
+  .arrow { width:3.5vw; height:4px; background:linear-gradient(90deg, #223042 50%, transparent 50%) 0 0/16px 4px repeat-x; position:relative; }
+  .on .arrow { animation:flow 1s linear infinite; }
+  @keyframes flow { from { background-position:0 0 } to { background-position:16px 0 } }
+  .on .node { animation:lit 6s ease infinite; } .on .node:nth-child(3){animation-delay:.6s} .on .node:nth-child(5){animation-delay:1.2s} .on .node:nth-child(7){animation-delay:1.8s} .on .node:nth-child(9){animation-delay:2.4s}
+  @keyframes lit { 0%,100% { border-color:#223042; box-shadow:none; transform:none } 12% { border-color:var(--acc); box-shadow:0 0 30px rgba(255,204,51,.35); transform:translateY(-4px) } 30% { border-color:#223042; box-shadow:none; transform:none } }
+  .node.last { border-color:var(--green); }
+  /* corridor */
+  .corr { display:flex; gap:2vw; margin:3vh 0; }
+  .cam { flex:1; background:rgba(17,24,35,.9); border:2px solid #223042; border-radius:1.6vh; padding:2.4vh 1.6vw; min-height:22vh; position:relative; }
+  .cam h3 { margin:0 0 1.2vh; font:700 2.6vh var(--mono); color:var(--blue); }
+  .cam .sc { font:700 3.4vh var(--mono); color:var(--acc); opacity:0; transform:scale(.6); transition:all .4s cubic-bezier(.2,1.4,.4,1); }
+  .on .cam .sc { opacity:1; transform:none; } .on .cam:nth-child(1) .sc { transition-delay:1.6s } .on .cam:nth-child(3) .sc { transition-delay:2.2s }
+  .cam.best { border-color:var(--orange); box-shadow:0 0 40px rgba(255,140,66,.25); }
+  .token { position:absolute; top:-2.6vh; left:50%; width:2.2vh; height:2.2vh; border-radius:50%; background:var(--acc); box-shadow:0 0 18px var(--acc); opacity:0; }
+  .on .token { animation:tok 2.6s ease forwards; } .on .cam:nth-child(1) .token { animation-delay:.4s } .on .cam:nth-child(2) .token { animation-delay:.1s } .on .cam:nth-child(3) .token { animation-delay:.9s }
+  @keyframes tok { 0% { opacity:0; transform:translate(-50%, -8vh) } 30% { opacity:1 } 100% { opacity:0; transform:translate(-50%, 6vh) } }
+  pre.sql { font:1.9vh/1.5 var(--mono); color:#9fb3c8; background:#0a0e14; border:1px solid #223042; border-radius:1.2vh; padding:2vh 1.6vw; white-space:pre-wrap; max-width:80vw; }
+  .type { border-right:.12em solid var(--acc); white-space:pre-wrap; overflow:hidden; }
+  /* media */
+  .frame { border-radius:1.6vh; overflow:hidden; border:1px solid #223042; box-shadow:0 30px 80px rgba(0,0,0,.6); background:#000; }
+  .frame img, .frame video { display:block; width:100%; height:100%; object-fit:cover; }
+  .kb { animation:kb 14s ease-in-out infinite alternate; } @keyframes kb { from { transform:scale(1) } to { transform:scale(1.08) translate(-1.5%, -1%) } }
+  .letter { display:inline-block; opacity:0; transform:translateY(30px) rotate(4deg); animation:ltr .7s cubic-bezier(.2,1.2,.3,1) forwards; }
+  @keyframes ltr { to { opacity:1; transform:none } }
+  .stamp { position:absolute; right:6vw; top:14vh; transform:rotate(-12deg) scale(3); opacity:0; font:900 5vh var(--mono); color:var(--green); border:.6vh solid var(--green); padding:1vh 2vw; border-radius:1vh; letter-spacing:.2em; }
+  .on .stamp { animation:stamp .5s cubic-bezier(.2,1.6,.4,1) 1.4s forwards; } @keyframes stamp { to { opacity:1; transform:rotate(-12deg) scale(1) } }
+  .bar { height:1.4vh; background:#1b2635; border-radius:1vh; overflow:hidden; margin:.8vh 0 2.4vh; } .bar i { display:block; height:100%; width:0; transition:width 1.4s cubic-bezier(.2,.9,.2,1); }
+  .on .bar i { width:var(--w); } .on .bar.d2 i { transition-delay:.7s }
+  .live { position:absolute; right:3vw; top:4vh; font:700 2vh var(--mono); color:var(--red); border:2px solid var(--red); padding:.8vh 1.2vw; border-radius:1vh; letter-spacing:.2em; cursor:pointer; background:rgba(0,0,0,.5); }
+  .live::before { content:"●"; margin-right:.6em; animation:blink 1s steps(2) infinite; } @keyframes blink { 50% { opacity:0 } }
+  .progress { position:fixed; left:0; bottom:0; height:.6vh; background:var(--acc); transition:width .4s; z-index:5; }
+  .foot { position:fixed; left:2vw; bottom:1.6vh; font:1.7vh var(--mono); color:#5c6b80; z-index:5; }
+  .close { text-align:center; } .close h2 { max-width:none; margin:2vh auto; }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<!-- 1 title -->
+<section class="slide" data-video="Hop24-trailer.mp4" data-start="4" data-end="11">
+  <video class="bgvid" muted playsinline preload="auto"></video><div class="shade"></div>
+  <div class="kicker b">VAST Builders Challenge 2026 · Team 10</div>
+  <h1 id="title"><span>H</span><span>O</span><span>P</span>&nbsp;<span>2</span><span>4</span></h1>
+  <p class="sub b">Cross a real highway. The archive is watching.</p>
+  <p class="dim b">A video agent built on VAST AI OS · NVIDIA Cosmos + YOLO11 · CoreWeave · Weights &amp; Biases</p>
+</section>
+
+<!-- 2 problem -->
+<section class="slide">
+  <img class="bgimg kb" src="img/intro.jpg" alt=""><div class="shade"></div>
+  <div class="kicker">The problem</div>
+  <h2>Nobody watches the archive</h2>
+  <div class="stats">
+    <div class="stat b"><div class="n" data-count="414">0</div><div class="l">video chunks indexed for the team</div></div>
+    <div class="stat b"><div class="n" data-count="30">0</div><div class="l">I-24 highway clips, 3 cameras on one pole</div></div>
+    <div class="stat b"><div class="n" data-count="9294">0</div><div class="l">YOLO boxes stored for one 30-second clip</div></div>
+  </div>
+  <p class="b">A vehicle hits someone and keeps going. An operator opens cameras one by one and scrubs 30-second clips by hand — while the pipeline already wrote a description, vectors and boxes for every five seconds of it.</p>
+</section>
+
+<!-- 3 the game -->
+<section class="slide">
+  <img class="bgimg kb" src="img/splat.jpg" alt=""><div class="shade"></div>
+  <div class="live" onclick="window.open('http://video-lab-team-10.cosmos.vastdata.com/app','hop24app')">LIVE DEMO · L</div>
+  <div class="kicker">The idea</div>
+  <h2>A game you cannot fake</h2>
+  <ul style="list-style:none;padding:0;margin:0">
+    <li class="b">▸ Real I-24 footage streamed from the archive — not an animation.</li>
+    <li class="b">▸ Every box is a YOLO11 detection the pipeline already stored in VastDB.</li>
+    <li class="b">▸ The road axis is fitted from those boxes. Collision = chicken touches a stored vehicle.</li>
+    <li class="b">▸ <b>The archive is the physics.</b></li>
+  </ul>
+</section>
+
+<!-- 4 kill-cam -->
+<section class="slide" data-video="Hop24-trailer.mp4" data-start="11.5" data-end="21">
+  <div class="kicker">Kill-cam</div>
+  <h2>Slow motion, then the evidence frame</h2>
+  <div class="row">
+    <div class="col frame" style="aspect-ratio:16/9;max-height:52vh"><video muted playsinline preload="auto"></video></div>
+    <div class="col" style="flex:.55">
+      <p class="b">Last 2.4 s at 0.35×, the killer's class tracked in red.</p>
+      <p class="b">Evidence frame with <span class="mono">camera · segment · time · class · confidence</span> burned in.</p>
+      <p class="b dim">Nothing staged: the vehicle that hit me is whatever YOLO put in that box.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5 archive knew -->
+<section class="slide">
+  <div class="kicker">The archive already knew</div>
+  <h2>Every five seconds, the pipeline wrote it all down</h2>
+  <div class="pipe">
+    <div class="node">Segmenter<small>5 s clips → S3</small></div><div class="arrow"></div>
+    <div class="node">YOLO11s<small>boxes at 30 fps</small></div><div class="arrow"></div>
+    <div class="node">Cosmos3-Reason<small>description</small></div><div class="arrow"></div>
+    <div class="node">Cosmos Embed1<small>256-d vectors</small></div><div class="arrow"></div>
+    <div class="node last">VastDB<small>vss-collection</small></div>
+  </div>
+  <div class="stats">
+    <div class="stat b"><div class="n" data-count="141">0</div><div class="l">of 180 highway captions name a vehicle colour</div></div>
+    <div class="stat b"><div class="n" data-count="48">0</div><div class="l">say which lane the vehicle is in</div></div>
+    <div class="stat b"><div class="n" data-count="0">0</div><div class="l">give a lane number — remember that gap</div></div>
+  </div>
+</section>
+
+<!-- 6 manhunt -->
+<section class="slide">
+  <div class="live" onclick="window.open('http://video-lab-team-10.cosmos.vastdata.com/app','hop24app')">LIVE DEMO · L</div>
+  <div class="kicker">Manhunt</div>
+  <h2>One hybrid query, every camera</h2>
+  <div class="corr">
+    <div class="cam"><div class="token"></div><h3>scene1_p1c1</h3><div class="dim">candidate sightings</div><div class="sc">0.35</div></div>
+    <div class="cam"><div class="token"></div><h3>scene1_p1c2</h3><div class="dim">scene of crime</div><div class="sc" style="color:var(--red)">●</div></div>
+    <div class="cam best"><div class="token"></div><h3>scene1_p1c3</h3><div class="dim">strongest match</div><div class="sc">0.41</div></div>
+  </div>
+  <pre class="sql type" data-type='SELECT … FROM "team-10-vss-db/vss-schema"."vss-collection"
+WHERE camera_id = &#39;i24_cam-1&#39; AND (is_public = TRUE OR allowed_users && ARRAY[&#39;team-10&#39;])
+ORDER BY array_cosine_distance(vectors::FLOAT[256], &lt;query&gt;) LIMIT 100     -- caption branch
+   ∪ same on vectors_visual                                               -- visual branch · text weight 0.60'></pre>
+</section>
+
+<!-- 7 report -->
+<section class="slide">
+  <div class="stamp">FILED</div>
+  <div class="kicker">Action</div>
+  <h2>Incident report generated and filed</h2>
+  <div class="row">
+    <div class="col frame" style="max-height:60vh;aspect-ratio:4/3"><img src="img/report.jpg" alt="incident report"></div>
+    <div class="col">
+      <p class="b">Event · camera · time</p><p class="b">Detection, confidence, bbox</p><p class="b">Stored description · query issued · VastDB SQL</p><p class="b">Sightings on other cameras · last seen · recommended action</p><p class="b dim">Download, copy, print. Thirty seconds ago this was a chicken getting hit.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 8 sharpen -->
+<section class="slide">
+  <div class="kicker">Sharpen the archive</div>
+  <h2>The prompt decides what gets indexed</h2>
+  <div class="row">
+    <div class="col"><div class="dim mono b">BEFORE · stock prompt</div><p class="b type" data-type="A white semi-truck travels in the right-hand lanes while several cars follow; clear lane markings are visible."></p></div>
+    <div class="col"><div class="mono b" style="color:var(--green)">AFTER · investigator prompt via DataEngine</div><p class="b type" data-type="Lane 1 (from the left shoulder): white semi-truck with a box trailer, eastbound, 0–5 s. Lane 3: silver sedan, braking at 3 s. No lane changes." style="transition-delay:1.6s"></p></div>
+  </div>
+  <p class="b dim" style="margin-top:3vh">POST /dashboard/reingest · custom prompt ≤ 800 chars · detector → reasoner → embedder → VastDB writer · takes minutes, so it is pre-run.</p>
+</section>
+
+<!-- 9 autopilot + RL -->
+<section class="slide" data-video="Hop24-trailer.mp4" data-start="29" data-end="36">
+  <div class="live" onclick="window.open('http://video-lab-team-10.cosmos.vastdata.com/app','hop24app')">LIVE DEMO · A</div>
+  <div class="kicker">Autopilot</div>
+  <h2>The agent crosses on its own — a policy it learned</h2>
+  <div class="row">
+    <div class="col frame" style="aspect-ratio:16/9;max-height:46vh"><video muted playsinline preload="auto"></video></div>
+    <div class="col" style="flex:.8">
+      <p class="b">Offline simulator from the real detections of all 30 chunks. Tabular Q-learning; state = time-to-impact of the current, next, next-but-one and previous lane, plus progress.</p>
+      <div class="b"><div class="mono dim">rule-based agent · crossings 39% · on this camera 31%</div><div class="bar"><i style="--w:39%;background:var(--blue)"></i></div>
+      <div class="mono" style="color:var(--green)">learned policy · crossings 41% · on this camera 46%</div><div class="bar d2"><i style="--w:41%;background:var(--green)"></i></div></div>
+      <p class="b dim mono" style="font-size:2.2vh">9,000 episodes · logged to Weights &amp; Biases · no peeking at future frames</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 close -->
+<section class="slide close">
+  <img class="bgimg kb" src="img/hero.jpg" alt=""><div class="shade" style="background:rgba(7,10,15,.78)"></div>
+  <div class="kicker b">Built on the archive, not beside it</div>
+  <h2 class="b">problem → archive → search across cameras → action</h2>
+  <p class="b" style="margin:0 auto;max-width:none">The archive's own detections are the physics. One query covers every camera. The agent can already cross on its own.</p>
+  <p class="b sub" style="margin:3vh auto 0;max-width:none;color:var(--acc)">The data was always there. We just gave it something to do.</p>
+  <p class="b dim mono" style="margin:4vh auto 0;max-width:none">github.com/vnmoorthy/hop24 · team-10-app.thecosmoslabs.com/app</p>
+</section>
+
+</div>
+<div class="progress" id="prog"></div>
+<div class="foot">Hop 24 · ← → to navigate · L opens the live app · F fullscreen</div>
+
+<script>
+(() => {
+const slides = [...document.querySelectorAll('.slide')]; let i = 0;
+slides.forEach(s => { const v = s.querySelector('video'); if (v && s.dataset.video) { v.src = `${s.dataset.video}#t=${s.dataset.start},${s.dataset.end}`; v.load(); } });
+document.querySelectorAll('#title span').forEach((s, k) => { s.className = 'letter'; s.style.animationDelay = (0.15 + k * 0.12) + 's'; });
+function countUp(el) { const n = +el.dataset.count; const t0 = performance.now(); const dur = 1400; (function f(t) { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(n * e).toLocaleString(); if (p < 1) requestAnimationFrame(f); })(t0); }
+function typeIn(el) { const txt = el.dataset.type; el.textContent = ''; let k = 0; clearInterval(el._t); el._t = setInterval(() => { el.textContent = txt.slice(0, ++k); if (k >= txt.length) clearInterval(el._t); }, 18); }
+function show(n) {
+  i = (n + slides.length) % slides.length;
+  slides.forEach((s, k) => {
+    const on = k === i; s.classList.toggle('on', on);
+    const v = s.querySelector('video');
+    if (v) { const st = +s.dataset.start, en = +s.dataset.end; if (on) { v.ontimeupdate = () => { if (v.currentTime >= en - 0.05) { v.currentTime = st; v.play().catch(() => {}); } }; v.onpause = () => { if (s.classList.contains('on') && v.currentTime >= en - 0.1) { v.currentTime = st; v.play().catch(() => {}); } }; v.play().catch(() => {}); } else { v.onpause = null; v.pause(); } }
+    if (on) { s.querySelectorAll('[data-count]').forEach(countUp); s.querySelectorAll('.type').forEach(typeIn); s.querySelectorAll('.letter').forEach(l => { l.style.animation = 'none'; void l.offsetWidth; l.style.animation = ''; }); }
+  });
+  document.getElementById('prog').style.width = ((i + 1) / slides.length * 100) + '%';
+  location.hash = i + 1;
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(i + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(i - 1); }
+  else if (e.key === 'f' || e.key === 'F') { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+  else if (e.key === 'l' || e.key === 'L') { window.open('http://video-lab-team-10.cosmos.vastdata.com/app', 'hop24app'); }
+  else if (e.key === 'Home') show(0);
+});
+show(Math.max(0, (parseInt(location.hash.slice(1)) || 1) - 1));
+})();
+</script>
+</body>
+</html>

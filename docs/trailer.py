@@ -56,8 +56,8 @@ def axis(all_boxes):
     return {"d": d, "n": n, "mu": (mx, my), "pmin": lo[int(0.01 * len(lo))], "pmax": hi[int(0.99 * len(hi))]}
 
 
-sheet = Image.open(os.path.join(ROOT, "img", "chicken_sheet.png")).convert("RGBA")
-CH = [sheet.crop((256 * i, 0, 256 * (i + 1), 256)) for i in range(9)]
+sheet = Image.open(os.path.join(ROOT, "..", "tools", "hop24", "sprite.png")).convert("RGBA")
+CH = [sheet.crop((160 * i, 0, 160 * (i + 1), 160)) for i in range(9)]
 
 
 def chicken(im, x, y, frame, size=120, angle=90):

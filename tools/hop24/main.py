@@ -362,7 +362,7 @@ def self_update():
     if not RAW:
         return None
     os.makedirs(UPDATE_DIR, exist_ok=True)
-    for f in ("main.py", "index.html", "sprite.png"):
+    for f in ("main.py", "index.html", "sprite.png", "policy.json"):
         with urllib.request.urlopen(RAW + f + "?t=" + str(int(time.time())), timeout=15) as r:
             data = r.read()
         with open(os.path.join(UPDATE_DIR, f), "wb") as fh:
@@ -495,6 +495,9 @@ class H(BaseHTTPRequestHandler):
                 return self._json({"scores": SCORES[-20:]})
             if p == "/sprite.png":
                 return self._file(os.path.join(HERE, "sprite.png"), "image/png")
+            if p == "/policy.json":
+                fp = os.path.join(HERE, "policy.json")
+                return self._file(fp, "application/json") if os.path.exists(fp) else self._json({"error": "no policy"}, 404)
             if p == "/redescribe":
                 job = (q.get("job") or [""])[0]
                 if MOCK:

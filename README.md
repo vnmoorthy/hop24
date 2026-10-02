@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="docs/img/hero.jpg" alt="Hop 24 — a Blender-rendered chicken crossing real I-24 footage with YOLO boxes overlaid" width="100%">
+  <img src="docs/img/hero.jpg" alt="Hop 24 — a chicken crossing real I-24 footage with YOLO boxes overlaid" width="100%">
 </p>
 
 <h1 align="center">Hop 24</h1>
 <p align="center"><b>Cross a real highway. When a truck gets you, the archive finds it on every other camera.</b></p>
 
-Hop 24 is a video agent disguised as an arcade game. You play a 3D-rendered chicken crossing a real
+Hop 24 is a video agent disguised as an arcade game. You play a chicken crossing a real
 30-second clip from the I-24 corridor in Nashville. Every collision is decided by the YOLO11 detections
 the VAST DataEngine pipeline already stored in VastDB, not by anything we drew. When a vehicle hits you,
 the agent reads the segment's stored Cosmos description, builds a query from it, runs one hybrid
@@ -21,7 +21,6 @@ the agent cross on its own, using only the stored detections and no knowledge of
   <img alt="VastDB" src="https://img.shields.io/badge/archive-VastDB-5ab0ff">
   <img alt="CoreWeave" src="https://img.shields.io/badge/GPUs-CoreWeave-3ddc84">
   <img alt="Python stdlib" src="https://img.shields.io/badge/backend-Python%20stdlib%20only-ffcc33">
-  <img alt="Blender" src="https://img.shields.io/badge/chicken-Blender%20Eevee-e87d0d">
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey">
 </p>
 
@@ -213,7 +212,7 @@ sequenceDiagram
 | `GET /boxes?source=` | normalises the detections sidecar to `{frames:[{t, b:[[label, conf, [x1,y1,x2,y2]]]}], shape, count}`; votes on xyxy vs xywh and normalised vs pixel coordinates | `/videos/detections` |
 | `GET /stream?source=` | `Range` pass-through proxy; retries login once on 401 | `/videos/stream` |
 | `GET /caption?source=&fresh=1` | `reasoning_content` of a segment; `fresh=1` bypasses the cache | `/videos/metadata` |
-| `GET /sprite.png` | the Blender sprite sheet | — |
+| `GET /sprite.png` | the chicken sprite sheet | — |
 | `GET /scores` / `POST /score` | in-memory scoreboard, last 20 runs | — |
 | `POST /investigate` | builds the query from label + caption, runs one hybrid search with `camera_id = i24_cam-1`, `top_k 15`, `min_similarity 0.15`; returns hits, per-hit camera, and the SQL | `/search` |
 | `POST /redescribe` | starts a re-ingest of one chunk with the investigator prompt | `/dashboard/reingest` |
@@ -233,7 +232,6 @@ sequenceDiagram
 | **CoreWeave** | the GPUs all three models run on | indirect |
 | **NVIDIA Canary-1B ASR** | available on the stack | not used |
 | **W&B Inference / Weave** | the stack's app LLM and tracing | not used (see next steps) |
-| **Blender (Eevee)** | rendered the chicken sprite sheet | offline, at build time |
 
 ## The physics is the archive
 
@@ -275,23 +273,31 @@ currently on screen, never a future frame.
 It is not scripted: in testing the agent crossed `chunk_0003` in 2.2 s on one run and was killed by a semi
 (labelled `bus`, 74 %) at 2.4 s on another.
 
-## Blender
+## Learned autopilot — reinforcement learning, tracked in Weights & Biases
 
-<p align="center"><img src="docs/img/chicken_sheet.png" alt="chicken sprite sheet: 8 hop frames and a splat" width="100%"></p>
+The autopilot's policy is learned, not hand-written. `tools/hop24/rl/train.py` builds an offline simulator from the
+archive's own detections of all 30 highway chunks (27,000 frames of stored YOLO boxes) with the exact geometry
+the browser uses — PCA road axis, 8 hops across, 44 px chicken, collision against the inscribed ellipse of a box,
+velocity from nearest-neighbour box matching, no access to future frames — and trains a tabular Q-learning agent on it:
 
-`blender/chicken.py` is a headless `bpy` script:
+| | |
+|---|---|
+| State | time-to-impact bins (0.3 / 0.6 / 1.0 / 1.5 s / none) for the current lane, the next lane, the lane after, the previous lane; progress bucket; hop cooldown |
+| Actions | hold · hop · back |
+| Reward | +10 crossed, −10 hit, −2 timeout, +0.5 per forward hop, −0.6 per retreat, −0.04 per frame |
+| Training | 9,000 episodes, ε 1.0 → 0.05, α 0.15, γ 0.97, 241 s on a laptop |
+| Result (600 held-out random starts, same seed) | learned **41%** crossings vs rule-based **39%**; on the demo camera p1c2 **46%** vs **31%** |
+
+Every run logs to W&B (`wandb.init(project="hop24-autopilot")`): crossing / death / timeout rates, mean reward and
+crossing time per 100 episodes, greedy evaluations every 1,000 episodes, the baseline in the summary, and the exported
+`policy.json` as a W&B artifact. The exported Q-table is served at `/policy.json`; the page looks the state up live
+(the same bins, computed in JavaScript) and shows the lookup in the thought line — `RL · here clear · next 0.4s …`.
+If a state was never visited, the rule-based agent takes over.
 
 ```bash
-/Applications/Blender.app/Contents/MacOS/Blender -b --python blender/chicken.py -- /tmp/chicken
+python3 tools/hop24/rl/train.py --boxes /path/to/segment_jsons --out tools/hop24/policy.json     # WANDB_API_KEY in env
+wandb sync tools/hop24/rl/wandb/offline-run-*                                                  # or sync an offline run
 ```
-
-It builds the bird from primitives (spheres for body, neck, head, wings, eyes; cones for tail, comb, wattle,
-beak, legs) with Principled BSDF materials, a steep tracking camera like a pole camera, a sun key and an
-area fill, then keyframes an 8-frame hop cycle (body lift and pitch, leg swing, wing flap) and renders each
-frame with Eevee at 256 px on a transparent background. A ninth frame is the splat: the root scaled to
-`(1.25, 1.35, 0.3)` with the wings splayed. The nine PNGs are packed into `docs/img/chicken_sheet.png`
-(2304 x 256) and downscaled to `tools/hop24/sprite.png` (1440 x 160, 160 px per frame). In the game the
-sprite is rotated to face the far side, drawn over a soft shadow ellipse, and frame `8` is shown on death.
 
 ## Run locally
 
@@ -396,7 +402,7 @@ and YOLO11 served on CoreWeave, and the VSS REST backend. The I-24 footage and t
 challenge and are not part of this repository.
 
 Files: `tools/hop24/main.py` (backend), `tools/hop24/index.html` (the page), `tools/hop24/sprite.png`,
-`blender/chicken.py`, `docs/img/`.
+`docs/img/`.
 
 ## License
 

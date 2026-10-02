@@ -177,7 +177,8 @@ const cv = $('cv'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
 const kill = $('kill'), kctx = kill.getContext('2d');
 const vids = [mkVideo(), mkVideo()];
 const sprite = new Image(); sprite.src = BASE + 'sprite.png';
-let S = null, levels = [], showBoxes = true, calibrating = 0, frames = 0, fpsT = performance.now(), toastT = 0;
+let S = null, levels = [], showBoxes = true, calibrating = 0, frames = 0, fpsT = performance.now(), toastT = 0, POLICY = null;
+api('policy.json').then(p => { POLICY = p && p.q ? p : null; if (POLICY) { const m = POLICY.meta || {}; $('hmode').textContent = 'AUTOPILOT · RL policy'; $('hmode').title = `Q-learning, ${m.episodes} episodes on ${m.chunks} chunks · crossed ${Math.round((m.eval || {}).crossed * 100)}% vs heuristic ${Math.round((m.baseline || {}).crossed * 100)}%` + (m.wandb_name ? ` · W&B run ${m.wandb_name}` : ''); } }).catch(() => {});
 
 function mkVideo() { const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; return v; }
 function toast(t, ms = 2600) { $('toast').textContent = t; $('toast').classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('on'), ms); }
@@ -259,7 +260,7 @@ function stopAll() { vids.forEach(v => { v.pause(); v.onended = null; }); }
 function start(auto = false) {
   if (!S) return;
   if (S.dead || S.won) return loadLevel(S.level, S.segments).then(() => start(auto));
-  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; vids.forEach(v => { v.playbackRate = 1; });
+  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; S.hops = 0; vids.forEach(v => { v.playbackRate = 1; });
   if (S.spawn) { S.chicken.x = S.spawn[0]; S.chicken.y = S.spawn[1]; }
   $('intro').classList.remove('on'); $('stage').classList.remove('shake');
   $('hmode').style.display = auto ? '' : 'none'; $('thought').classList.toggle('on', auto);
@@ -316,12 +317,38 @@ function autopilot(fr, now) {
     return null;
   };
   const nx = c.x + a.n[0] * step, ny = c.y + a.n[1] * step, bx = c.x - a.n[0] * step, by = c.y - a.n[1] * step;
-  const here = dangerAt(c.x, c.y), next = dangerAt(nx, ny);
-  const hop = (x, y, why) => { c.x = Math.max(0, Math.min(W - c.w, x)); c.y = Math.max(0, Math.min(H - c.h, y)); S.lastHop = now; if (!S.t0) S.t0 = performance.now(); S.anim++; $('thought').textContent = why; };
+  const hop = (x, y, why, dir = 1) => { c.x = Math.max(0, Math.min(W - c.w, x)); c.y = Math.max(0, Math.min(H - c.h, y)); S.lastHop = now; S.hops = (S.hops || 0) + dir; if (!S.t0) S.t0 = performance.now(); S.anim++; $('thought').textContent = why; };
   if (now < 0.45) { $('thought').textContent = 'watching the traffic to estimate speeds…'; return; }
-  if (now - S.lastHop < 0.26) return;
+  const cool = now - S.lastHop < 0.26;
+  // earliest predicted overlap with a cell, sampled every 0.1 s up to 1.5 s — identical to rl/train.py
+  const etaAt = (px, py) => {
+    let best = null;
+    for (const q of cur) {
+      let vx = q.vx, vy = q.vy;
+      if (!q.known) { const toward = Math.sign((px - q.x) * a.d[0] + (py - q.y) * a.d[1]) || 1; vx = a.d[0] * 900 * toward; vy = a.d[1] * 900 * toward; }
+      for (let k = 0; k < 16; k++) { const t = k * 0.1, qx = q.x + vx * t, qy = q.y + vy * t;
+        if (qx < px + c.w + margin && qx + q.w > px - margin && qy < py + c.h + margin && qy + q.h > py - margin) { if (best === null || t < best) best = t; break; } }
+    }
+    return best;
+  };
+  if (POLICY) {
+    const bins = POLICY.bins_s, bin = e => { if (e === null) return bins.length; for (let i = 0; i < bins.length; i++) if (e < bins[i]) return i; return bins.length; };
+    const eh = etaAt(c.x, c.y), en = etaAt(nx, ny), en2 = etaAt(c.x + a.n[0] * 2 * step, c.y + a.n[1] * 2 * step), eb = etaAt(bx, by);
+    const prog = Math.min(2, Math.floor(Math.max(0, S.hops || 0) / 3));
+    const key = [bin(eh), bin(en), bin(en2), bin(eb), prog, cool ? 1 : 0].join(',');
+    const q = POLICY.q[key];
+    const lab = e => e === null ? 'clear' : e.toFixed(1) + 's';
+    if (q) {
+      const act = q.indexOf(Math.max(...q));
+      const why = `RL · here ${lab(eh)} · next ${lab(en)} · +2 ${lab(en2)} · back ${lab(eb)} · lane ${S.hops || 0}/8 → ${POLICY.actions[act]}  (Q ${q.map(v => v.toFixed(1)).join(' / ')})`;
+      if (cool || act === 0) { $('thought').textContent = why; return; }
+      return hop(act === 1 ? nx : bx, act === 1 ? ny : by, why, act === 1 ? 1 : -1);
+    }
+  }
+  if (cool) return;
+  const here = dangerAt(c.x, c.y), next = dangerAt(nx, ny);
   if (!next) return hop(nx, ny, 'next lane clear for 0.65 s → hop');
-  if (here) { const back = dangerAt(bx, by); if (!back) return hop(bx, by, `dodge back · ${here.label} on me in ${here.eta}s, next lane also blocked by ${next.label}`); }
+  if (here) { const back = dangerAt(bx, by); if (!back) return hop(bx, by, `dodge back · ${here.label} on me in ${here.eta}s, next lane also blocked by ${next.label}`, -1); }
   $('thought').textContent = `hold · ${next.label} crossing the next lane at ${next.v} px/s, there in ${next.eta}s`;
 }
 
