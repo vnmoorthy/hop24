@@ -405,8 +405,16 @@ def self_update():
         return None
     os.makedirs(UPDATE_DIR, exist_ok=True)
     for f in ("main.py", "index.html", "sprite.png", "policy.json", "blood.png"):
-        with urllib.request.urlopen(RAW + f + "?t=" + str(int(time.time())), timeout=15) as r:
-            data = r.read()
+        # GitHub's contents API is not CDN-cached (raw.githubusercontent.com can serve minutes-old copies)
+        api_url = "https://api.github.com/repos/vnmoorthy/hop24/contents/tools/hop24/" + f + "?ref=main"
+        req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.raw+json", "User-Agent": "hop24"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                data = r.read()
+        except Exception as e:  # noqa: BLE001
+            log("api fetch failed, falling back to raw:", repr(e))
+            with urllib.request.urlopen(RAW + f + "?t=" + str(int(time.time())), timeout=15) as r:
+                data = r.read()
         with open(os.path.join(UPDATE_DIR, f), "wb") as fh:
             fh.write(data)
     return UPDATE_DIR
