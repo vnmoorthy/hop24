@@ -3,7 +3,7 @@
 10 slides, 3:00 total. Slides 3, 4, 6, 7 and 9 are LIVE in the app; everything else is a static slide.
 Every number below comes from the live team-10 archive or the code in `tools/hop24/`. Do not inflate them on stage.
 
-A note on "real video": the stage footage in Hop 24 is real I-24 Nashville camera video streamed from the VAST archive, not an animation. The only drawn element is the chicken sprite. Say this out loud on slide 3 — it is the single biggest "wait, really?" moment and it is true.
+A note on "real video": the stage footage in Hop 24 is real I-24 Nashville camera video streamed from the VAST archive, not an animation. The only drawn elements are the chicken sprite sheet, the green FastSAM silhouettes over the stored boxes, and the blood sprite sheet at impact; the video frames are untouched. Say this out loud on slide 3 — it is the single biggest "wait, really?" moment and it is true.
 
 Timing budget (speak at ~165 wpm; this is brisk, so rehearse with a timer):
 
@@ -63,12 +63,12 @@ Timing budget (speak at ~165 wpm; this is brisk, so rehearse with a timer):
 
 ## Slide 3 — The idea / the game  (0:34-0:56)  LIVE
 
-**On screen:** Switch to the browser. App open on the venue URL, chunk_0003 on p1c2 selected, intro overlay visible (`intro.jpg` is what this looks like). Press space. Hop with the arrow keys, two or three hops into traffic. YOLO boxes are ON (B).
+**On screen:** Switch to the browser. App open on the venue URL, chunk_0003 on p1c2 selected, intro overlay visible (`intro.jpg` is what this looks like). Press space. Hop with the arrow keys, two or three hops into traffic. YOLO boxes are ON (B). Inside every box a green vehicle silhouette is drawn (FastSAM mask, prompted by the stored box); the HUD pill reads `silhouettes · FastSAM`.
 
-**Spoken (58 words):**
-"So we made it a game. This is not an animation, this is the real I-24 footage streaming from the archive. Every box you see is a YOLO detection the pipeline already stored. The road axis is fitted from those boxes. The chicken is the only thing we rendered. Collision is simply: does my rectangle touch a stored box. The archive is the physics."
+**Spoken (69 words):**
+"So we made it a game. This is not an animation, this is real I-24 footage streaming from the archive. Every box is a YOLO detection the pipeline already stored. The road axis is fitted from those boxes. The chicken is a sprite sheet, the only thing we drew. Collision is the green outline: FastSAM, prompted by the stored box, gives the vehicle's silhouette. The archive is the physics."
 
-**Gesture / click:** Press `space` on "made it a game". Hop `↑` twice on "real I-24 footage". Hover over a box on "every box you see".
+**Gesture / click:** Press `space` on "made it a game". Hop `↑` twice on "real I-24 footage". Point at a green silhouette on "the green outline". Point at the `silhouettes · FastSAM` pill on "FastSAM".
 
 **Fallback:** If the stream does not start within 3 seconds, show `docs/img/intro.jpg` then `docs/img/splat.jpg` and say "the venue network is being shy; this is the same screen". Keep the same words.
 
@@ -76,12 +76,12 @@ Timing budget (speak at ~165 wpm; this is brisk, so rehearse with a timer):
 
 ## Slide 4 — Kill-cam  (0:56-1:16)  LIVE
 
-**On screen:** Hop into a truck or car on purpose. Screen shakes. Slow-motion (0.35x) letterboxed replay of the last 2.4 s with the killer tracked in red, then the cropped evidence frame in the Kill-cam card with camera, segment, time, class and confidence burned in (`replay.jpg`, `splat.jpg`).
+**On screen:** Hop into a truck or car on purpose. Screen shakes. Slow-motion (0.35x) letterboxed replay of the last 2.4 s with the killer tracked in red. When the replay ends, a 12-frame blood burst (a sprite sheet) plays at the point of contact and the last frame stays on the road as a stain. The Kill-cam card then shows the cropped evidence frame, re-captured about 60 ms after the burst settles, with camera, segment, time, class and confidence burned in (`replay.jpg`, `splat.jpg`).
 
-**Spoken (50 words):**
-"And there it is. Watch the replay: last two and a half seconds, slow motion, the killer tracked in red. On the right, the evidence frame: camera, segment, timestamp, class, confidence, all burned in. Nothing here was staged for the demo. The vehicle that hit me is whatever YOLO put in that box."
+**Spoken (62 words):**
+"And there it is. Watch the replay: the last two point four seconds, slow motion, the killer tracked in red. The impact leaves blood where the silhouette touched me, and the evidence frame is re-captured once it settles: camera, segment, timestamp, class, confidence, all burned in. The footage itself is untouched. The vehicle that hit me is whatever YOLO put in that box."
 
-**Gesture / click:** Hop `↑` into the nearest lane with traffic on "and there it is". Point at the red box during the replay. Point at the Kill-cam card on "evidence frame".
+**Gesture / click:** Hop `↑` into the nearest lane with traffic on "and there it is". Point at the red box during the replay. Point at the stain on "leaves blood". Point at the Kill-cam card on "evidence frame".
 
 **Fallback:** If the replay stalls (video seek fails), the banner still shows "SPLAT · killed by a <class>"; show `docs/img/replay.jpg` for the slow-mo and keep going. If no collision happens within two hops, press `R` and hop again; do not wait more than 5 seconds.
 
@@ -146,12 +146,14 @@ Optional live click if the pre-run completed in this tab: click "Re-read caption
 
 ## Slide 9 — Autopilot  (2:26-2:44)  LIVE
 
-**On screen:** Back in the app on the same chunk. Press `A`. The "AUTOPILOT" pill lights up, the thought line shows the agent's reasoning live ("watching the traffic to estimate speeds…", "next lane clear for 0.65 s → hop", "hold · truck crossing the next lane at N px/s, there in 0.4s", "dodge back …"). It crosses, or it dies; both are fine.
+**On screen:** Back in the app on the same chunk. Press `A`. The HUD pill reads `AUTOPILOT · RL policy` and the thought line shows the Q-table lookup live (`RL · here clear · next 0.4s · +2 clear · back clear · lane 3/8 → hop (Q …)`); unseen states fall back to the rule-based agent ("next lane clear for 0.65 s → hop", "hold · truck crossing the next lane …"). It crosses, or it dies; both are fine.
 
-**Spoken (60 words):**
-"Last thing. Press A and the agent crosses by itself — with a policy it learned. We built a simulator from the archive's own detections of all thirty clips and trained it with Q-learning, every run logged to Weights and Biases. No peeking at future frames: it only sees the boxes up to now. Learned beats rule-based: 41 versus 39 percent of random starts overall, and 46 versus 31 on this camera. It still dies sometimes. That is the proof."
+Numbers (600 random chunk/start-time episodes, same seed for both policies, on the same 30 chunks the policy trained on; `tools/hop24/rl/train.py`): learned 40.7% crossed vs rule-based 38.8% overall; on p1c2 (this camera) 46.2% vs 31.3%; on p1c3 the learned policy is worse (53.4% vs 64.0%). 9,000 episodes of tabular Q-learning, 241 s on a laptop, every run logged to Weights & Biases project `hop24-autopilot`.
 
-**Gesture / click:** Press `A` on "press A". Point at the thought line on "read its reasoning live". If it dies, say "see, honest" and move on; do not retry.
+**Spoken (64 words):**
+"Last thing. Press A and the agent crosses with a policy it learned. We built a simulator from the archive's own detections of all thirty clips, trained it with Q-learning, and logged every run to Weights and Biases. No peeking at future frames. Learned beats rule-based: 41 versus 39 percent of random starts overall, 46 versus 31 on this camera. It still dies sometimes. That is the proof."
+
+**Gesture / click:** Press `A` on "press A". Point at the `AUTOPILOT · RL policy` pill on "policy it learned". Point at the thought line on "no peeking". If it dies, say "see, honest" and move on; do not retry.
 
 **Fallback:** If the stream will not play, show `docs/img/crossed.jpg` (the CROSSED banner from a real autopilot run) and read the same words.
 
@@ -160,7 +162,7 @@ Optional live click if the pre-run completed in this tab: click "Re-read caption
 ## Slide 10 — Architecture + next  (2:44-3:00)
 
 **On screen:** One diagram, left to right:
-`Browser (canvas, 1280x720)` → `Hop 24 backend (Python stdlib, ~570 lines)` → `VSS REST API` → `VastDB vss-collection / S3 segments`.
+`Browser (canvas, 1280x720)` → `Hop 24 backend (Python stdlib, ~580 lines)` → `VSS REST API` → `VastDB vss-collection / S3 segments`.
 Side labels: Cosmos3-Reason captions, Cosmos Embed1 vectors, YOLO11s boxes, DataEngine reingest. Three "next" bullets: more poles of the I-24 corridor; let the agent choose its own re-describe prompt per incident; track a vehicle across segments, not just find look-alikes.
 
 **Spoken (68 words):**
@@ -176,10 +178,12 @@ Side labels: Cosmos3-Reason captions, Cosmos Embed1 vectors, YOLO11s boxes, Data
 
 ## Pre-demo checklist (do this in order, 15 minutes before)
 
+0. **Open the presentation:** `docs/present.html`, served by a range-capable static server (python's `http.server` cannot seek the trailer video; e.g. `npx serve docs` or `caddy file-server`) or the published URL `https://vnmoorthy.github.io/hop24/present.html`. Press `F` for fullscreen; `←`/`→` move between the 10 slides; `L` opens the live app in a new tab. Confirm the title slide plays the trailer.
 1. **Clear localStorage first.** In the browser devtools on the app origin: `localStorage.clear()`. This removes any saved road-edge calibration (`hop24.axis.*`) so the road axis is fitted from the detections live, which is what you say on slide 3. Do this BEFORE the next step; do not reload the tab afterwards.
-2. **Open the app on the venue URL:** `http://video-lab-team-10.cosmos.vastdata.com/app`. Keep `https://team-10-app.thecosmoslabs.com/app/` open in a second tab as the public fallback.
+2. **Open the app on the venue URL:** `http://video-lab-team-10.cosmos.vastdata.com/app` (or press `L` in the presentation). Keep `https://team-10-app.thecosmoslabs.com/app/` open in a second tab as the public fallback.
 3. **Wait for "loading the archive…" to finish** on the intro overlay (the `/levels` call parses 3 cameras x 10 chunks).
-4. **Pick p1c2 in the camera chips and chunk_0003 in the chunk selector.** This is the chunk the autopilot numbers (2.2 s crossing) were measured on.
+4. **Pick p1c2 in the camera chips and chunk_0003 in the chunk selector.** This is the chunk the autopilot numbers (2.2 s crossing) were measured on, and the only chunk with precomputed FastSAM silhouettes (all 6 segments); other chunks fall back to an ellipse inside the box.
+4a. **Confirm the HUD pills:** after the stream starts, the HUD must show `silhouettes · FastSAM` (green; means `/masks` loaded for this segment) and `AUTOPILOT · RL policy` once you press `A` (means `/policy.json` loaded). If either is missing, the ConfigMap is stale: redeploy, or hit `/reload?key=` and refresh.
 5. **Player name:** type the judge's company into the "player name" field (it is the scoreboard name; keep it short so the scoreboard row fits).
 6. **Pre-run re-describe, 10 minutes before:** click "Re-describe this clip" in card 3 and watch the progress bar until "completed · 6/6 segments". It takes minutes. Then click "Re-read caption" once, copy the fresh text into slide 8. **Keep this tab open and do not reload it:** the "Re-read caption" button only enables in the tab where the job was polled.
 7. **Zoom the browser to 110%** (cmd + once or twice) so the Kill-cam card and thought line read from the back of the room. Check the 1280x720 stage still fits without a horizontal scrollbar.
@@ -194,13 +198,22 @@ Side labels: Cosmos3-Reason captions, Cosmos Embed1 vectors, YOLO11s boxes, Data
 ## Likely judge questions and answers
 
 **Is the autopilot peeking at the future?**
-No. It only sees the boxes already drawn for the current frame and the previous ~0.3 s. It matches each box to its nearest neighbour in the previous frame to estimate velocity, extrapolates 0.65 s ahead, and hops only if no predicted box overlaps the next cell. Boxes with no velocity estimate are assumed to be at highway speed. It gets killed sometimes; that is the proof.
+No. It only sees the boxes already drawn for the current frame and the previous ~0.3 s. It matches each box to its nearest neighbour in the previous frame to estimate velocity, bins the time-to-arrival of the current, next, next-but-one and previous lanes into a state, and looks that state up in the learned Q-table (hold / hop / back). States it never saw during training fall back to the rule-based agent: extrapolate 0.65 s ahead, hop only if no predicted box overlaps the next cell. Boxes with no velocity estimate are assumed to be at highway speed. It gets killed sometimes; that is the proof.
+
+**Is the RL honest? What did it actually learn?**
+Tabular Q-learning (`tools/hop24/rl/train.py`) on an offline simulator built from the stored detections of all 30 highway chunks, 27,000 frames, with the app's exact geometry: PCA road axis, 8 hops across, ellipse collision, the same velocity estimator. 9,000 episodes, 241 s on a laptop. Evaluated against the rule-based agent on 600 random starts with the same seed (same 30 chunks it trained on, so a same-data comparison, not a held-out test): 40.7% crossed vs 38.8% overall; 46.2% vs 31.3% on p1c2; 24.5% vs 23.6% on p1c1; and worse on p1c3, 53.4% vs 64.0%. Every run is logged to Weights & Biases (project `hop24-autopilot`, policy exported as the `hop24-autopilot-policy` artifact). A two-point overall gain is modest; the per-camera split is the honest picture.
+
+**Is that really the vehicle outline?**
+Yes, within the limits of a small segmentation model. `tools/hop24/seg/masks.py` runs FastSAM (`FastSAM-s.pt`) prompted by the archive's stored YOLO boxes, matches each mask back to its box by overlap, and simplifies it to a polygon of at most 14 points, every 3rd frame. The page picks the nearest mask frame, matches it to the live box by IoU, shifts it by the box's motion since that frame, draws it green and tests the chicken's five body points against it. The masks were precomputed on a laptop for the demo chunk (p1c2 chunk_0003, all 6 segments); the pod has no GPU. Other chunks fall back to an ellipse inside the box.
+
+**Where does the blood come from?**
+A 12-frame sprite sheet (`tools/hop24/blood.png`: a burst of droplets, then a spreading pool) drawn on the canvas at the point of contact after the slow-motion replay ends; the last frame stays on the road as a stain. Nothing in the footage is altered; the video frames come straight from the archive. The evidence frame is re-captured once the burst settles so the report shows the scene as it ended.
 
 **Is this re-identification? Are you claiming that is the same truck on the other camera?**
 No, and we say so on the report. The search returns description-similar segments ("candidate sightings"), ranked by hybrid similarity, filtered to the corridor. An investigator still has to confirm. That is why the re-describe step exists: the stock captions rarely say which lane, and lane plus colour plus trailer narrows candidates a lot.
 
 **What does VAST do here?**
-Everything we read lives in VAST: the 5-second segments in S3, the per-segment rows in the VastDB `vss-collection` table (caption, text vector, visual vector, YOLO detections, camera metadata), and the hybrid search that returns its own SQL. The re-describe step is a DataEngine reingest job (segmenter → detector → reasoner → embedder → VastDB writer) with a custom prompt. Our backend is a 570-line stdlib proxy on top of the VSS REST API; we did not build a database or a pipeline, we gave yours an agent.
+Everything we read lives in VAST: the 5-second segments in S3, the per-segment rows in the VastDB `vss-collection` table (caption, text vector, visual vector, YOLO detections, camera metadata), and the hybrid search that returns its own SQL. The re-describe step is a DataEngine reingest job (segmenter → detector → reasoner → embedder → VastDB writer) with a custom prompt. Our backend is a 580-line stdlib proxy on top of the VSS REST API; we did not build a database or a pipeline, we gave yours an agent.
 
 **Why a game?**
 Because a collision is a concrete, timestamped event with a known vehicle, and the room understands it in two seconds. The game is the staging; the agent's work starts after the hit: read the caption, search every camera, file the report, sharpen the archive. The same loop applies to any trigger event in the footage. It also forced us to use the stored detections as physics, which is a stress test of the archive's quality on every frame.

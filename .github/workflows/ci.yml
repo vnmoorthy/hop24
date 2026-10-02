@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg (mock mode renders a synthetic clip once)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Byte-compile backend and tooling
+        run: python -m py_compile tools/hop24/main.py tools/hop24/rl/train.py tools/hop24/seg/masks.py
+
+      - name: Start the mock server
+        run: |
+          HOP24_MOCK=1 PORT=8080 python3 tools/hop24/main.py > mock.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8080/health > /dev/null && break
+            sleep 1
+          done
+
+      - name: Smoke-test routes
+        run: |
+          for route in health levels policy.json; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/$route")
+            echo "/$route -> $code"
+            [ "$code" = "200" ] || { cat mock.log; exit 1; }
+          done
+
+      - name: ConfigMap payload must stay under 1,000,000 bytes
+        run: |
+          cd tools/hop24
+          size=$(cat main.py index.html sprite.png blood.png policy.json masks__*.json | wc -c | tr -d ' ')
+          echo "payload: $size bytes"
+          [ "$size" -lt 1000000 ]
+
+      - name: Backend must be stdlib only
+        run: |
+          ! grep -nE '^(import|from) (requests|numpy|cv2|flask|fastapi|wandb|ultralytics)' tools/hop24/main.py
