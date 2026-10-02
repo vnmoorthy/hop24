@@ -3,149 +3,224 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hop 24</title>
+<title>Hop 24 — cross a real highway</title>
 <style>
-  :root { --bg:#0b0f14; --panel:#131a22; --line:#243040; --fg:#e8eef5; --dim:#8a98a8; --acc:#ffcc33; --red:#ff4d4d; --green:#3ddc84; --blue:#5ab0ff; }
+  :root {
+    --bg:#070a0f; --bg2:#0d1219; --panel:#111823; --panel2:#161f2c; --line:#223042; --line2:#2d3d52;
+    --fg:#e9eef6; --dim:#8b9bb0; --mute:#5c6b80; --acc:#ffcc33; --acc2:#ffb000; --red:#ff4d4d; --green:#3ddc84; --blue:#5ab0ff; --orange:#ff8c42;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  header { display:flex; gap:14px; align-items:center; padding:8px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-  header h1 { margin:0; font-size:20px; letter-spacing:2px; color:var(--acc); }
-  header h1 span { color:var(--dim); font-weight:normal; font-size:12px; letter-spacing:0; margin-left:8px; }
-  select, button, input { background:#1b2430; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 9px; font:inherit; }
-  button { cursor:pointer; } button:hover { border-color:var(--acc); } button:disabled { opacity:.4; cursor:default; }
-  button.primary { background:var(--acc); color:#000; font-weight:bold; }
-  main { display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:12px; padding:12px 14px; }
-  #stage { position:relative; background:#000; border:1px solid var(--line); border-radius:8px; overflow:hidden; aspect-ratio:16/9; }
+  html, body { height:100%; }
+  body { margin:0; background:radial-gradient(1200px 600px at 20% -10%, #15213a 0%, var(--bg) 55%); color:var(--fg); font:14px/1.45 var(--sans); }
+  button, select, input { font:inherit; }
+  button { background:var(--panel2); color:var(--fg); border:1px solid var(--line2); border-radius:8px; padding:7px 12px; cursor:pointer; transition:.15s; display:inline-flex; align-items:center; gap:6px; }
+  button:hover { border-color:var(--acc); transform:translateY(-1px); } button:active { transform:translateY(0); }
+  button:disabled { opacity:.35; cursor:default; transform:none; border-color:var(--line2); }
+  button.primary { background:linear-gradient(180deg, #ffd65c, #ffb000); color:#1a1200; border-color:#ffd65c; font-weight:700; }
+  button.primary kbd { background:rgba(0,0,0,.18); color:#1a1200; border-color:rgba(0,0,0,.35); }
+  button.danger { border-color:#7a2a2a; } button.ghost { background:transparent; }
+  button.on { border-color:var(--acc); box-shadow:inset 0 0 0 1px var(--acc); }
+  select, input { background:var(--panel2); color:var(--fg); border:1px solid var(--line2); border-radius:8px; padding:7px 10px; }
+  kbd { font:11px var(--mono); border:1px solid var(--line2); border-bottom-width:2px; border-radius:4px; padding:1px 6px; background:#0b1017; }
+  .mono { font-family:var(--mono); }
+
+  header { display:flex; align-items:center; gap:14px; padding:10px 18px; border-bottom:1px solid var(--line); background:rgba(7,10,15,.7); backdrop-filter: blur(8px); position:sticky; top:0; z-index:5; flex-wrap:wrap; }
+  .logo { display:flex; align-items:baseline; gap:10px; }
+  .logo b { font:900 22px/1 var(--mono); letter-spacing:3px; color:var(--acc); text-shadow:0 0 18px rgba(255,204,51,.35); }
+  .logo span { color:var(--dim); font-size:12px; }
+  .chips { display:flex; gap:6px; }
+  .chip { padding:6px 10px; border-radius:999px; border:1px solid var(--line2); color:var(--dim); cursor:pointer; font:12px var(--mono); }
+  .chip.on { color:#111; background:var(--acc); border-color:var(--acc); font-weight:700; }
+  .spacer { flex:1; }
+
+  main { display:grid; grid-template-columns: minmax(0,1fr) 400px; gap:14px; padding:14px 18px; }
+  #stage { position:relative; background:#000; border:1px solid var(--line2); border-radius:12px; overflow:hidden; aspect-ratio:16/9; box-shadow:0 20px 60px rgba(0,0,0,.5); }
   #cv { width:100%; height:100%; display:block; }
-  #stage.shake { animation: shake .45s; }
-  @keyframes shake { 0%,100%{transform:translate(0,0)} 20%{transform:translate(-12px,6px)} 40%{transform:translate(10px,-8px)} 60%{transform:translate(-8px,4px)} 80%{transform:translate(6px,-3px)} }
-  #hud { position:absolute; left:10px; top:8px; display:flex; gap:10px; font-size:13px; }
-  #hud span { background:rgba(0,0,0,.55); padding:3px 8px; border-radius:4px; }
-  #banner { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:8px; background:rgba(0,0,0,.35); text-align:center; }
-  #banner.on { display:flex; }
-  #banner .big { font-size:72px; font-weight:900; letter-spacing:6px; text-shadow:0 4px 24px #000; }
-  #banner .sub { font-size:16px; background:rgba(0,0,0,.6); padding:6px 12px; border-radius:6px; }
-  aside { display:flex; flex-direction:column; gap:10px; min-width:0; }
-  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; }
-  .box h2 { margin:0 0 8px; font-size:12px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; }
-  #kill { width:100%; aspect-ratio:4/3; background:#000; border-radius:6px; display:block; }
-  .facts { font-size:12px; color:var(--dim); margin-top:6px; }
+  #stage.shake { animation: shake .5s; }
+  @keyframes shake { 0%,100%{transform:translate(0,0)} 15%{transform:translate(-14px,7px) rotate(-.6deg)} 35%{transform:translate(11px,-9px) rotate(.5deg)} 55%{transform:translate(-8px,5px)} 75%{transform:translate(6px,-3px)} }
+  .hud { position:absolute; left:12px; right:12px; top:10px; display:flex; gap:8px; align-items:center; font:12px var(--mono); pointer-events:none; }
+  .hud .pill { background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.08); padding:4px 9px; border-radius:6px; }
+  .hud .pill.acc { color:var(--acc); }
+  .segbar { position:absolute; left:0; right:0; bottom:0; height:5px; display:flex; gap:2px; background:rgba(0,0,0,.5); }
+  .segbar i { flex:1; background:rgba(255,255,255,.12); } .segbar i.done { background:var(--acc); } .segbar i.cur { background:linear-gradient(90deg, var(--acc) var(--p,0%), rgba(255,255,255,.12) var(--p,0%)); }
+  #thought { position:absolute; left:12px; bottom:14px; max-width:70%; background:rgba(0,0,0,.65); border-left:3px solid var(--blue); padding:6px 10px; font:12px var(--mono); color:#cfe3ff; display:none; border-radius:4px; }
+  #thought.on { display:block; }
+  .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; background:rgba(4,6,10,.55); text-align:center; }
+  .overlay.on { display:flex; }
+  .overlay .big { font:900 84px/1 var(--mono); letter-spacing:8px; text-shadow:0 6px 30px #000; }
+  .overlay .sub { font-size:15px; background:rgba(0,0,0,.6); padding:8px 14px; border-radius:8px; }
+  #intro { gap:14px; }
+  #intro h2 { margin:0; font:900 54px/1 var(--mono); letter-spacing:6px; color:var(--acc); text-shadow:0 0 30px rgba(255,204,51,.4); }
+  #intro p { margin:0; max-width:620px; color:#d8e2ee; font-size:15px; }
+  #intro .keys { display:flex; gap:12px; color:var(--dim); font-size:13px; }
+
+  aside { display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .card { background:linear-gradient(180deg, var(--panel), var(--bg2)); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .card h2 { margin:0 0 8px; font:700 11px var(--mono); letter-spacing:2px; color:var(--dim); text-transform:uppercase; display:flex; align-items:center; gap:8px; }
+  .card h2 .n { background:var(--acc); color:#111; border-radius:999px; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+  #kill { width:100%; aspect-ratio:4/3; background:#000; border-radius:8px; display:block; border:1px solid var(--line); }
+  .facts { font:12px var(--mono); color:var(--dim); margin-top:8px; line-height:1.6; }
   .facts b { color:var(--fg); }
-  .cap { font-size:12px; margin-top:6px; max-height:90px; overflow:auto; color:#c9d4e0; }
-  .hits { display:flex; flex-direction:column; gap:6px; margin-top:6px; max-height:260px; overflow:auto; }
-  .hit { display:grid; grid-template-columns: 92px 1fr auto; gap:8px; align-items:center; font-size:12px; border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
-  .hit .cam { color:var(--blue); font-weight:bold; }
-  .hit .sc { color:var(--acc); }
-  .hit .cp { color:var(--dim); grid-column: 1 / -1; }
-  pre { font-size:10px; color:#9fb3c8; white-space:pre-wrap; max-height:120px; overflow:auto; margin:6px 0 0; }
-  #status { color:var(--dim); font-size:12px; padding:0 14px 10px; }
-  .scores { font-size:12px; } .scores div { display:flex; justify-content:space-between; border-bottom:1px dashed var(--line); padding:2px 0; }
-  kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:11px; color:var(--fg); }
-  @media (max-width:900px){ main { grid-template-columns:1fr; } }
+  .cap { font-size:12.5px; margin-top:6px; max-height:96px; overflow:auto; color:#cbd6e3; border-left:3px solid var(--line2); padding-left:8px; }
+  .cap.fresh { border-color:var(--green); }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .corridor { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:8px; }
+  .col { border:1px solid var(--line); border-radius:8px; padding:6px; min-height:60px; background:rgba(255,255,255,.02); }
+  .col h3 { margin:0 0 4px; font:700 11px var(--mono); color:var(--blue); display:flex; justify-content:space-between; }
+  .col h3 .same { color:var(--mute); font-weight:400; }
+  .hit { border:1px solid var(--line); border-radius:6px; padding:5px 6px; margin-top:4px; font-size:11px; cursor:pointer; }
+  .hit:hover { border-color:var(--acc); }
+  .hit .sc { color:var(--acc); font-family:var(--mono); }
+  .hit .cp { color:var(--dim); display:block; margin-top:2px; }
+  .hit.best { border-color:var(--orange); }
+  pre { font:10.5px/1.4 var(--mono); color:#9fb3c8; white-space:pre-wrap; max-height:130px; overflow:auto; margin:6px 0 0; background:#0a0e14; padding:8px; border-radius:6px; }
+  details summary { cursor:pointer; color:var(--dim); font-size:12px; margin-top:8px; }
+  .prog { height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin-top:8px; } .prog i { display:block; height:100%; background:linear-gradient(90deg, var(--blue), var(--green)); width:0; transition:width .4s; }
+  .scores div { display:flex; justify-content:space-between; border-bottom:1px dashed var(--line); padding:3px 0; font:12px var(--mono); }
+  .scores .me { color:var(--acc); }
+  #toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:#1b2635; border:1px solid var(--line2); padding:8px 14px; border-radius:8px; font:12px var(--mono); opacity:0; transition:.25s; pointer-events:none; z-index:9; }
+  #toast.on { opacity:1; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:8; }
+  .modal.on { display:flex; }
+  .modal .sheet { background:#fff; color:#111; width:min(820px, 94vw); max-height:90vh; overflow:auto; border-radius:10px; padding:28px 32px; font-family:Georgia, serif; }
+  .sheet h1 { margin:0 0 4px; font:900 22px var(--mono); letter-spacing:2px; } .sheet .meta { color:#555; font:12px var(--mono); margin-bottom:14px; }
+  .sheet table { width:100%; border-collapse:collapse; font-size:13px; } .sheet td, .sheet th { border-bottom:1px solid #ddd; padding:6px 4px; text-align:left; vertical-align:top; }
+  .sheet img { max-width:100%; border:1px solid #ccc; border-radius:4px; }
+  .sheet .sql { font:10px var(--mono); background:#f3f3f3; padding:8px; white-space:pre-wrap; }
+  .sheet .actions { display:flex; gap:8px; margin-top:16px; }
+  .sheet .actions button { background:#111; color:#fff; border:none; }
+  .sheet .actions button.alt { background:#eee; color:#111; }
+  @media (max-width:1000px){ main { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>HOP 24 <span>cross a real highway. the archive is watching.</span></h1>
-  <select id="level"></select>
-  <button id="start" class="primary">Start (space)</button>
-  <button id="boxesBtn">Boxes: on (B)</button>
-  <button id="calBtn">Calibrate road (C)</button>
+  <div class="logo"><b>HOP 24</b><span>cross a real highway · the archive is watching</span></div>
+  <div class="chips" id="cams"></div>
+  <select id="level" title="chunk"></select>
+  <div class="spacer"></div>
   <input id="name" placeholder="player name" size="12">
+  <button id="start" class="primary">▶ Start <kbd>space</kbd></button>
+  <button id="auto" title="let the agent cross using the archive's detections">🤖 Autopilot <kbd>A</kbd></button>
+  <button id="boxesBtn" class="on">Boxes <kbd>B</kbd></button>
+  <button id="calBtn" class="ghost">Calibrate road <kbd>C</kbd></button>
 </header>
+
 <main>
   <div id="stage">
     <canvas id="cv" width="1280" height="720"></canvas>
-    <div id="hud"><span id="hcam">-</span><span id="hseg">seg -</span><span id="htime">0.0 s</span><span id="hfps"></span></div>
-    <div id="banner"><div class="big" id="bigtxt"></div><div class="sub" id="subtxt"></div></div>
+    <div class="hud">
+      <span class="pill acc" id="hcam">—</span><span class="pill" id="hseg">seg –</span><span class="pill" id="htime">0.0 s</span>
+      <span class="pill" id="hboxes">0 boxes</span><span class="pill" id="hfps"></span><span class="pill" id="hmode" style="display:none">AUTOPILOT</span>
+    </div>
+    <div id="thought"></div>
+    <div class="segbar" id="segbar"></div>
+    <div class="overlay on" id="intro">
+      <h2>HOP 24</h2>
+      <p>This is real footage from the I-24 corridor in Nashville, pole 1. Every box you see is a YOLO detection the pipeline already stored in VastDB. Cross the highway. When a truck gets you, the agent finds it on every other camera.</p>
+      <div class="keys"><span><kbd>←↑↓→</kbd> hop</span><span><kbd>space</kbd> start</span><span><kbd>A</kbd> autopilot</span><span><kbd>B</kbd> boxes</span><span><kbd>C</kbd> calibrate</span></div>
+      <div id="introStatus" class="mono" style="color:var(--dim);font-size:12px">loading the archive…</div>
+    </div>
+    <div class="overlay" id="banner"><div class="big" id="bigtxt"></div><div class="sub" id="subtxt"></div></div>
   </div>
+
   <aside>
-    <div class="box">
-      <h2>Kill-cam</h2>
-      <canvas id="kill" width="320" height="240"></canvas>
-      <div class="facts" id="facts">No incident yet. Arrow keys to hop. Reach the top shoulder.</div>
+    <div class="card">
+      <h2><span class="n">1</span> Kill-cam</h2>
+      <canvas id="kill" width="400" height="300"></canvas>
+      <div class="facts" id="facts">No incident yet.</div>
       <div class="cap" id="cap"></div>
-      <div style="margin-top:8px; display:flex; gap:6px;">
-        <button id="inv" disabled>Find my killer across cameras</button>
+      <div class="row">
+        <button id="inv" disabled>🔎 Find my killer across cameras</button>
+        <button id="report" disabled>📄 File incident report</button>
       </div>
     </div>
-    <div class="box" id="manhunt" style="display:none">
-      <h2>Manhunt — one query, every camera</h2>
-      <div class="facts">query: <b id="qtxt"></b></div>
-      <div class="hits" id="hits"></div>
-      <details><summary style="cursor:pointer;color:var(--dim);font-size:12px">VastDB query</summary><pre id="sql"></pre></details>
+
+    <div class="card" id="manhunt" style="display:none">
+      <h2><span class="n">2</span> Manhunt — one query, every camera</h2>
+      <div class="facts">query <b id="qtxt" class="mono"></b> · <span id="qstat"></span></div>
+      <div class="corridor" id="corridor"></div>
+      <details><summary>VastDB query the backend ran (hybrid: caption vectors + visual vectors + filters)</summary><pre id="sql"></pre></details>
     </div>
-    <div class="box">
+
+    <div class="card" id="sharpen">
+      <h2><span class="n">3</span> Sharpen the archive</h2>
+      <div class="facts">The stored description decides what search can find. Re-describe this clip with an investigator's prompt (lane, colour, trailer) through the DataEngine pipeline, then search again.</div>
+      <div class="row"><button id="redo">🧠 Re-describe this clip</button><button id="recap" class="ghost" disabled>↻ Re-read caption</button></div>
+      <div class="prog" id="prog" style="display:none"><i id="progi"></i></div>
+      <div class="facts" id="redoStat"></div>
+    </div>
+
+    <div class="card">
       <h2>Scoreboard</h2>
       <div class="scores" id="scores"></div>
     </div>
   </aside>
 </main>
-<div id="status">loading…</div>
+
+<div id="toast"></div>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 
 <script>
 (() => {
+'use strict';
 const BASE = location.pathname.endsWith('/') ? location.pathname : location.pathname + '/';
 const $ = id => document.getElementById(id);
-const api = (p, opt) => fetch(BASE + p, opt).then(r => { if (!r.ok) throw new Error(p + ' -> ' + r.status); return r.json(); });
+const api = (p, opt) => fetch(BASE + p, opt).then(async r => { if (!r.ok) throw new Error(p.split('?')[0] + ' → HTTP ' + r.status + ' ' + (await r.text()).slice(0, 120)); return r.json(); });
 const post = (p, body) => api(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const SEG_SEC = 5;
 
 const cv = $('cv'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
 const kill = $('kill'), kctx = kill.getContext('2d');
 const vids = [mkVideo(), mkVideo()];
-let S = null;            // current session state
-let levels = [];
-let showBoxes = true;
-let calibrating = 0;     // 0 none, 1 waiting top, 2 waiting bottom
-let frames = 0, fpsT = performance.now();
+const sprite = new Image(); sprite.src = BASE + 'sprite.png';
+let S = null, levels = [], showBoxes = true, calibrating = 0, frames = 0, fpsT = performance.now(), toastT = 0;
 
-function mkVideo() {
-  const v = document.createElement('video');
-  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
-  return v;
-}
-function status(t) { $('status').textContent = t; }
-function roadFor(camera) {
-  try { const r = JSON.parse(localStorage.getItem('hop24.road.' + camera)); if (r && r.top < r.bottom) return r; } catch (e) {}
-  return { top: Math.round(H * 0.22), bottom: Math.round(H * 0.92) };
-}
+function mkVideo() { const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; return v; }
+function toast(t, ms = 2600) { $('toast').textContent = t; $('toast').classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('on'), ms); }
+function roadFor(camera) { try { const r = JSON.parse(localStorage.getItem('hop24.road.' + camera)); if (r && r.top < r.bottom) return r; } catch (e) {} return { top: Math.round(H * 0.22), bottom: Math.round(H * 0.92) }; }
+function segUrl(src) { return BASE + 'stream?source=' + encodeURIComponent(src); }
 
+// ---------------------------------------------------------------- session
 function newSession(level, segments) {
   const road = roadFor(level.camera);
-  S = {
-    level, segments, segIdx: 0, active: 0, boxes: [], shape: [1080, 1920],
-    road, chicken: { w: 30, h: 30, x: W / 2 - 15, y: 0 }, moved: false, t0: 0, dead: false, won: false, killer: null, started: false,
-  };
-  S.chicken.y = Math.min(H - 36, road.bottom + 6);
-  $('hcam').textContent = level.camera + ' · ' + level.filename.replace(/^\d+_\d+_/, '');
+  S = { level, segments, segIdx: 0, active: 0, boxes: [], shape: [1080, 1920], road, chicken: { w: 44, h: 44, x: W / 2 - 22, y: 0 },
+        t0: 0, dead: false, won: false, started: false, killer: null, auto: false, hopT: 0, anim: 0, lastHop: 0, hist: new Map() };
+  S.chicken.y = Math.min(H - 50, road.bottom + 4);
+  $('hcam').textContent = level.camera + ' · ' + level.filename.replace(/^\d+_\d+_scene\d+_p\d+c\d+_/, '').replace('.mp4', '');
+  $('segbar').innerHTML = segments.map(() => '<i></i>').join('');
 }
 
-async function loadLevel(level, segments) {
+async function loadLevel(level, segments, opts = {}) {
   if (S && S.started) stopAll();
   newSession(level, segments);
-  status('loading boxes for ' + segments.length + ' segments…');
+  $('introStatus').textContent = 'loading ' + segments.length + ' segments of detections…';
   const res = await Promise.all(segments.map(s => api('boxes?source=' + encodeURIComponent(s)).catch(e => ({ frames: [], shape: [1080, 1920], error: String(e) }))));
-  S.boxes = res.map(r => { const fr = r.frames || []; return { ts: fr.map(f => f.t), fr, err: r.error }; });
+  S.boxes = res.map(r => ({ ts: (r.frames || []).map(f => f.t), fr: r.frames || [], err: r.error }));
   if (res[0] && res[0].shape) S.shape = res[0].shape;
-  const nb = res.reduce((a, r) => a + (r.count || 0), 0);
-  const bad = res.filter(r => r.error).length;
-  status(`boxes loaded: ${nb} detections across ${segments.length} segments` + (bad ? ` (${bad} segment(s) without detections)` : '') + `. format ${res[0] && res[0].format || '?'}. Press Start.`);
-  vids[0].src = BASE + 'stream?source=' + encodeURIComponent(segments[0]);
-  vids[0].load();
-  if (segments[1]) { vids[1].src = BASE + 'stream?source=' + encodeURIComponent(segments[1]); vids[1].load(); }
+  const nb = res.reduce((a, r) => a + (r.count || 0), 0), bad = res.filter(r => r.error).length;
+  $('hboxes').textContent = nb.toLocaleString() + ' boxes';
+  $('introStatus').textContent = `${nb.toLocaleString()} detections across ${segments.length} segments` + (bad ? ` · ${bad} segment(s) have no detections` : '') + ' · press space';
+  vids[0].src = segUrl(segments[0]); vids[0].load();
+  if (segments[1]) { vids[1].src = segUrl(segments[1]); vids[1].load(); }
   banner('', '');
+  if (!opts.keepIntro) $('intro').classList.remove('on'); else $('intro').classList.add('on');
   draw();
 }
 
 function stopAll() { vids.forEach(v => { v.pause(); v.onended = null; }); }
 
-function start() {
+function start(auto = false) {
   if (!S) return;
-  if (S.dead || S.won) { return loadLevel(S.level, S.segments).then(start); }
-  S.started = true; S.t0 = 0; S.moved = false;
-  $('stage').classList.remove('shake');
-  $('inv').disabled = true; $('manhunt').style.display = 'none';
-  $('facts').textContent = 'Go. Arrow keys to hop; reach the top shoulder.'; $('cap').textContent = '';
+  if (S.dead || S.won) return loadLevel(S.level, S.segments).then(() => start(auto));
+  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.hist.clear(); vids.forEach(v => { v.playbackRate = 1; });
+  $('intro').classList.remove('on'); $('stage').classList.remove('shake');
+  $('hmode').style.display = auto ? '' : 'none'; $('thought').classList.toggle('on', auto);
+  $('inv').disabled = true; $('report').disabled = true; $('manhunt').style.display = 'none';
+  $('facts').textContent = auto ? 'Autopilot engaged: hops only when the next lane is clear for 0.6 s by extrapolating the stored tracks.' : 'Go. Reach the top shoulder.'; $('cap').textContent = ''; $('cap').classList.remove('fresh');
   kctx.clearRect(0, 0, kill.width, kill.height);
   playSeg(0);
 }
@@ -153,30 +228,53 @@ function start() {
 function playSeg(i) {
   const v = vids[i % 2];
   S.segIdx = i; S.active = i % 2;
-  v.onended = () => { if (S.segIdx + 1 < S.segments.length) playSeg(S.segIdx + 1); else endLevel(); };
-  const p = v.play(); if (p && p.catch) p.catch(e => status('play blocked: ' + e.message + ' — click Start again'));
-  // preload the one after next into the other element
+  v.currentTime = 0;
+  v.onended = () => { if (S.segIdx + 1 < S.segments.length) playSeg(S.segIdx + 1); else timeUp(); };
+  const p = v.play(); if (p && p.catch) p.catch(e => toast('autoplay blocked: ' + e.message + ' — press space again'));
   const nxt = i + 1, other = vids[(i + 1) % 2];
-  if (S.segments[nxt] && !other.src.endsWith(encodeURIComponent(S.segments[nxt]))) { other.src = BASE + 'stream?source=' + encodeURIComponent(S.segments[nxt]); other.load(); }
+  if (S.segments[nxt] && other.getAttribute('src') !== segUrl(S.segments[nxt])) { other.src = segUrl(S.segments[nxt]); other.load(); }
 }
 
-function endLevel() {
-  if (S.dead || S.won) return;
-  S.won = false; S.dead = false;
-  banner('TIME', 'the clip ran out. Space to retry.');
-  stopAll();
-}
+function timeUp() { if (S.dead || S.won) return; banner('TIME', 'the clip ran out before you crossed · space to retry'); stopAll(); S.started = false; }
 
-function curFrame() {
-  const v = vids[S.active], seg = S.boxes[S.segIdx];
-  if (!seg || !seg.fr.length) return null;
-  const t = v.currentTime, ts = seg.ts;
-  let lo = 0, hi = ts.length - 1;
+function curFrame(seg = S.segIdx, t = vids[S.active].currentTime) {
+  const sg = S.boxes[seg]; if (!sg || !sg.fr.length) return null;
+  const ts = sg.ts; let lo = 0, hi = ts.length - 1;
   while (lo < hi) { const m = (lo + hi) >> 1; if (ts[m] < t) lo = m + 1; else hi = m; }
   if (lo > 0 && Math.abs(ts[lo - 1] - t) < Math.abs(ts[lo] - t)) lo--;
-  return seg.fr[lo];
+  return sg.fr[lo];
 }
 
+// ---------------------------------------------------------------- autopilot (no peeking: velocity from the last ~0.3 s of boxes)
+function autopilot(fr, now) {
+  const c = S.chicken, sx = W / S.shape[1], sy = H / S.shape[0];
+  const step = (S.road.bottom - S.road.top) / 8;
+  const nextY = c.y - step, look = 0.6, margin = 18;
+  // track boxes by rough identity (label + lane band) to estimate velocity
+  let danger = null;
+  for (const [label, conf, b] of fr.b) {
+    if (label === 'person') continue;
+    const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
+    const key = label + '|' + Math.round((y + h / 2) / 40);
+    const prev = S.hist.get(key);
+    S.hist.set(key, { x, t: now });
+    const vx = prev && now - prev.t > 0.05 && now - prev.t < 0.5 ? (x - prev.x) / (now - prev.t) : 0; // px/s
+    const inLane = y < nextY + c.h + margin && y + h > nextY - margin;
+    if (!inLane) continue;
+    for (let k = 0; k <= 6; k++) { // sample the next 0.6 s
+      const xt = x + vx * (look * k / 6);
+      if (xt < c.x + c.w + margin && xt + w > c.x - margin) { danger = { label, vx: Math.round(vx), eta: (look * k / 6).toFixed(1) }; break; }
+    }
+    if (danger) break;
+  }
+  if (danger) {
+    $('thought').textContent = `hold · ${danger.label} in next lane, ${Math.abs(danger.vx)} px/s ${danger.vx < 0 ? '←' : '→'}, reaches me in ${danger.eta}s`;
+    return;
+  }
+  if (now - S.lastHop > 0.28) { c.y = Math.max(0, nextY); S.lastHop = now; if (!S.t0) S.t0 = performance.now(); S.anim++; $('thought').textContent = 'next lane clear for 0.6 s → hop'; }
+}
+
+// ---------------------------------------------------------------- draw loop
 function draw() {
   requestAnimationFrame(draw);
   if (!S) return;
@@ -184,57 +282,90 @@ function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (v.readyState >= 2) ctx.drawImage(v, 0, 0, W, H);
   const sx = W / S.shape[1], sy = H / S.shape[0];
-  // road band guide
-  ctx.strokeStyle = 'rgba(255,204,51,.35)'; ctx.setLineDash([8, 8]); ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, S.road.top); ctx.lineTo(W, S.road.top); ctx.moveTo(0, S.road.bottom); ctx.lineTo(W, S.road.bottom); ctx.stroke(); ctx.setLineDash([]);
-  const fr = S.started ? curFrame() : null;
-  const c = S.chicken;
+  ctx.save(); ctx.strokeStyle = 'rgba(255,204,51,.35)'; ctx.setLineDash([10, 10]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, S.road.top); ctx.lineTo(W, S.road.top); ctx.moveTo(0, S.road.bottom); ctx.lineTo(W, S.road.bottom); ctx.stroke(); ctx.restore();
+  const replaying = S.replay && S.replay.phase === 'playing';
+  if (replaying && (v.currentTime >= S.replay.until - 0.02 || v.ended)) { v.pause(); v.playbackRate = 1; S.replay.phase = 'done'; if (S.pendingBanner) { banner(...S.pendingBanner); S.pendingBanner = null; } }
+  const fr = (S.started || S.replay) ? curFrame() : null, c = S.chicken, now = S.segIdx * SEG_SEC + v.currentTime;
   let hit = null;
+  if (replaying && fr) {
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(0, 0, W, H);
+    for (const [label, conf, b] of fr.b) {
+      const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
+      if (label === S.replay.label) { ctx.strokeStyle = 'rgba(255,77,77,.95)'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h); ctx.fillStyle = 'rgba(255,77,77,.12)'; ctx.fillRect(x, y, w, h); }
+    }
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, 64); ctx.fillRect(0, H - 64, W, 64);
+    ctx.fillStyle = '#ff4d4d'; ctx.font = '700 15px ui-monospace, Menlo, monospace'; ctx.fillText('● KILL-CAM REPLAY  0.35×', 22, 40);
+    ctx.fillStyle = '#ddd'; ctx.font = '13px ui-monospace, Menlo, monospace'; ctx.textAlign = 'right'; ctx.fillText(`${S.level.camera}  ·  t = ${(S.segIdx * SEG_SEC + v.currentTime).toFixed(2)} s`, W - 22, 40); ctx.textAlign = 'left';
+    vignette();
+    return;
+  }
   if (fr) {
+    if (S.auto && !S.dead && !S.won) autopilot(fr, now);
     for (const [label, conf, b] of fr.b) {
       if (label === 'person') continue;
       const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
-      if (showBoxes) { ctx.strokeStyle = label === 'truck' || label === 'bus' ? '#ff8c42' : '#5ab0ff'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h); }
+      if (showBoxes) { ctx.strokeStyle = label === 'truck' || label === 'bus' ? 'rgba(255,140,66,.9)' : 'rgba(90,176,255,.85)'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
+        ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y - 14, 7.2 * label.length + 8, 14); ctx.fillStyle = '#fff'; ctx.font = '11px ' + 'ui-monospace, Menlo, monospace'; ctx.fillText(label, x + 4, y - 3); }
       if (!S.dead && !S.won && S.started && c.x < x + w && c.x + c.w > x && c.y < y + h && c.y + c.h > y) hit = { label, conf, b: [x, y, w, h], raw: b };
     }
   }
-  // chicken
-  ctx.font = '30px serif'; ctx.textBaseline = 'top';
-  ctx.fillText(S.dead ? '💥' : '🐔', c.x - 2, c.y - 4);
+  if (!S.replay || S.replay.phase === 'done') drawChicken(c, now);
+  vignette();
   if (hit) die(hit, v);
   if (S.started && !S.dead && !S.won && c.y + c.h < S.road.top) win();
-  // hud
   $('hseg').textContent = 'seg ' + (S.segIdx + 1) + '/' + S.segments.length;
-  $('htime').textContent = (S.segIdx * 5 + v.currentTime).toFixed(1) + ' s';
+  $('htime').textContent = now.toFixed(1) + ' s';
+  const bars = $('segbar').children; for (let i = 0; i < bars.length; i++) { bars[i].className = i < S.segIdx ? 'done' : i === S.segIdx ? 'cur' : ''; if (i === S.segIdx) bars[i].style.setProperty('--p', Math.round(v.currentTime / SEG_SEC * 100) + '%'); }
   if (++frames % 30 === 0) { const n = performance.now(); $('hfps').textContent = Math.round(30000 / (n - fpsT)) + ' fps'; fpsT = n; }
 }
 
+let vig = null;
+function vignette() {
+  if (!vig) { vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95); vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,.45)'); }
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+}
+function drawChicken(c, now) {
+  const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(cx + 4, cy + c.h * 0.42, c.w * 0.42, c.h * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+  if (sprite.complete && sprite.naturalWidth) {
+    const f = S.dead ? 8 : (Math.floor(now * 12 + S.anim * 2) % 8);
+    ctx.translate(cx, cy); if (!S.dead) ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(sprite, f * 160, 0, 160, 160, -c.w * 0.9, -c.h * 0.9, c.w * 1.8, c.h * 1.8);
+  } else { ctx.font = '34px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.dead ? '💥' : '🐔', cx, cy); }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- incident
 function die(hit, v) {
-  S.dead = true; stopAll();
-  $('stage').classList.add('shake');
+  S.dead = true; S.started = false; stopAll();
+  $('stage').classList.add('shake'); $('thought').classList.remove('on');
   const secs = S.t0 ? ((performance.now() - S.t0) / 1000).toFixed(1) : '0.0';
-  banner('SPLAT', `killed by a ${hit.label} (${Math.round(hit.conf * 100)}% sure) after ${secs} s · Space to retry`);
-  // kill-cam crop from the frozen frame
-  const [x, y, w, h] = hit.b, pad = 40;
-  const cx = Math.max(0, x - pad), cy = Math.max(0, y - pad), cw = Math.min(W - cx, w + 2 * pad), ch = Math.min(H - cy, h + 2 * pad);
+  S.pendingBanner = ['SPLAT', `${S.auto ? 'the agent was ' : ''}killed by a ${hit.label} (${Math.round(hit.conf * 100)}% sure) after ${secs} s · space to retry`];
+  const [x, y, w, h] = hit.b, pad = Math.max(40, w * 0.6);
+  const cx = Math.max(0, x - pad), cy = Math.max(0, y - pad * 0.75), cw = Math.min(W - cx, w + 2 * pad), ch = Math.min(H - cy, h + 1.5 * pad);
   kctx.fillStyle = '#000'; kctx.fillRect(0, 0, kill.width, kill.height);
   try { kctx.drawImage(cv, cx, cy, cw, ch, 0, 0, kill.width, kill.height); } catch (e) {}
-  kctx.strokeStyle = '#ff4d4d'; kctx.lineWidth = 3;
-  kctx.strokeRect((x - cx) * kill.width / cw, (y - cy) * kill.height / ch, w * kill.width / cw, h * kill.height / ch);
+  kctx.strokeStyle = '#ff4d4d'; kctx.lineWidth = 3; kctx.strokeRect((x - cx) * kill.width / cw, (y - cy) * kill.height / ch, w * kill.width / cw, h * kill.height / ch);
+  kctx.fillStyle = 'rgba(0,0,0,.6)'; kctx.fillRect(0, kill.height - 22, kill.width, 22); kctx.fillStyle = '#fff'; kctx.font = '12px ui-monospace, Menlo, monospace';
+  kctx.fillText(`${S.level.camera} · seg ${S.segIdx + 1} · t=${v.currentTime.toFixed(2)}s · ${hit.label} ${hit.conf}`, 8, kill.height - 7);
+  S.replay = { until: v.currentTime, label: hit.label, phase: 'playing', from: Math.max(0, v.currentTime - 2.4) };
+  v.onended = null; v.currentTime = S.replay.from; v.playbackRate = 0.35; const rp = v.play(); if (rp && rp.catch) rp.catch(() => { S.replay.phase = 'done'; if (S.pendingBanner) { banner(...S.pendingBanner); S.pendingBanner = null; } });
   const src = S.segments[S.segIdx];
-  S.killer = { label: hit.label, conf: hit.conf, bbox: hit.raw, source: src, t: v.currentTime, camera: S.level.camera };
-  $('facts').innerHTML = `<b>${hit.label}</b> · conf ${hit.conf} · ${S.level.camera} · segment ${S.segIdx + 1} at ${v.currentTime.toFixed(2)} s<br>bbox ${hit.raw.map(n => Math.round(n)).join(', ')} (video px)`;
-  $('cap').textContent = 'fetching the archive caption for this segment…';
-  api('caption?source=' + encodeURIComponent(src)).then(r => { S.killer.caption = r.caption || ''; $('cap').textContent = r.caption ? '📼 ' + r.caption : '(no caption stored for this segment)'; $('inv').disabled = false; })
-    .catch(e => { $('cap').textContent = 'caption unavailable: ' + e.message; $('inv').disabled = false; });
-  post('score', { name: $('name').value || 'anon', result: 'splat:' + hit.label, seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
+  S.killer = { label: hit.label, conf: hit.conf, bbox: hit.raw, source: src, t: v.currentTime, seg: S.segIdx + 1, camera: S.level.camera, crop: kill.toDataURL('image/jpeg', 0.85), when: new Date().toISOString(), secs, auto: S.auto, hits: null, query: null, sql: null };
+  $('facts').innerHTML = `<b>${esc(hit.label)}</b> · confidence ${hit.conf} · <b>${esc(S.level.camera)}</b> · segment ${S.segIdx + 1} at ${v.currentTime.toFixed(2)} s<br>bbox ${hit.raw.map(n => Math.round(n)).join(', ')} px · source …${esc(src.slice(-48))}`;
+  $('cap').textContent = 'reading the stored description of this segment…';
+  api('caption?source=' + encodeURIComponent(src)).then(r => { S.killer.caption = r.caption || ''; $('cap').textContent = r.caption ? '📼 ' + r.caption : '(no description stored for this segment)'; })
+    .catch(e => { $('cap').textContent = 'description unavailable: ' + e.message; }).finally(() => { $('inv').disabled = false; $('report').disabled = false; });
+  post('score', { name: ($('name').value || 'anon') + (S.auto ? ' 🤖' : ''), result: 'splat by ' + hit.label, seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
 }
 
 function win() {
-  S.won = true; stopAll();
+  S.won = true; S.started = false; stopAll(); $('thought').classList.remove('on');
   const secs = ((performance.now() - S.t0) / 1000).toFixed(1);
-  banner('CROSSED', `${secs} s · Space to play again`);
-  post('score', { name: $('name').value || 'anon', result: 'crossed', seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
+  banner('CROSSED', `${S.auto ? 'the agent crossed' : 'you crossed'} in ${secs} s · space to play again`);
+  post('score', { name: ($('name').value || 'anon') + (S.auto ? ' 🤖' : ''), result: 'crossed', seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
 }
 
 function banner(big, sub) {
@@ -242,71 +373,142 @@ function banner(big, sub) {
   $('bigtxt').style.color = big === 'SPLAT' ? 'var(--red)' : big === 'CROSSED' ? 'var(--green)' : 'var(--acc)';
   $('banner').classList.toggle('on', !!big);
 }
-
 function renderScores(list) {
-  $('scores').innerHTML = (list || []).slice().reverse().map(s => `<div><span>${esc(s.name)} · ${esc(s.result)}</span><span>${s.seconds}s</span></div>`).join('') || '<div><span>no runs yet</span></div>';
+  const me = $('name').value || 'anon';
+  $('scores').innerHTML = (list || []).slice().reverse().slice(0, 10).map(s => `<div class="${s.name.startsWith(me) ? 'me' : ''}"><span>${esc(s.name)} · ${esc(s.result)} · ${esc(s.camera || '')}</span><span>${s.seconds}s</span></div>`).join('') || '<div><span>no runs yet</span></div>';
 }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-// --- manhunt
+// ---------------------------------------------------------------- manhunt
 $('inv').onclick = async () => {
   if (!S || !S.killer) return;
-  $('inv').disabled = true; $('manhunt').style.display = 'block';
-  $('qtxt').textContent = 'searching…'; $('hits').innerHTML = ''; $('sql').textContent = '';
+  $('inv').disabled = true; $('manhunt').style.display = ''; $('qtxt').textContent = '…'; $('qstat').textContent = 'searching every camera'; $('corridor').innerHTML = ''; $('sql').textContent = '';
+  const t0 = performance.now();
   try {
     const r = await post('investigate', { label: S.killer.label, caption: S.killer.caption || '' });
-    $('qtxt').textContent = r.query;
+    const ms = Math.round(performance.now() - t0);
+    S.killer.query = r.query; S.killer.sql = r.sql; S.killer.hits = r.hits;
+    $('qtxt').textContent = r.query; $('qstat').textContent = `${r.hits.length} candidate sightings · ${ms} ms`;
     $('sql').textContent = r.sql || '(no sql returned)';
-    const groups = {};
-    for (const h of r.hits) (groups[h.camera] = groups[h.camera] || []).push(h);
-    const cams = Object.keys(groups).sort();
-    $('hits').innerHTML = cams.map(cam => groups[cam].slice(0, 3).map(h => `
-      <div class="hit"><span class="cam">${esc(cam)}${cam === S.killer.camera ? ' (same cam)' : ''}</span><span class="sc">score ${h.score}</span>
-      <button data-src="${esc(h.source)}" data-cam="${esc(cam)}">watch</button><span class="cp">${esc(h.caption.slice(0, 160))}…</span></div>`).join('')).join('') || '<div class="facts">no matching segments</div>';
-    $('hits').querySelectorAll('button').forEach(b => b.onclick = () => {
-      const lvl = { camera: b.dataset.cam, filename: b.dataset.src.split('/').pop() };
-      loadLevel(lvl, [b.dataset.src]).then(() => { S.started = true; playSeg(0); banner('', ''); });
-    });
-    status(`manhunt: ${r.hits.length} candidate sightings across ${cams.length} camera(s)`);
-  } catch (e) { $('qtxt').textContent = 'search failed: ' + e.message; }
+    const cams = [...new Set([...levels.map(l => l.camera), ...r.hits.map(h => h.camera)])].sort();
+    const best = r.hits.reduce((a, h) => h.camera !== S.killer.camera && (!a || h.score > a.score) ? h : a, null);
+    $('corridor').innerHTML = cams.map(cam => {
+      const hs = r.hits.filter(h => h.camera === cam).slice(0, 3);
+      return `<div class="col"><h3>${esc(cam)}${cam === S.killer.camera ? '<span class="same">scene of crime</span>' : ''}</h3>` +
+        (hs.map(h => `<div class="hit ${best && h.source === best.source ? 'best' : ''}" data-src="${esc(h.source)}" data-cam="${esc(cam)}" title="watch this segment"><span class="sc">${h.score.toFixed(3)}</span> ▶ seg ${(h.source.match(/_segment_(\d+)/) || [, '?'])[1]}<span class="cp">${esc(h.caption.slice(0, 110))}…</span></div>`).join('') || '<div class="cp" style="color:var(--mute);font-size:11px">no match</div>') + '</div>';
+    }).join('');
+    $('corridor').querySelectorAll('.hit').forEach(el => el.onclick = () => watchSegment(el.dataset.src, el.dataset.cam));
+    toast(best ? `strongest sighting on ${best.camera} (score ${best.score.toFixed(2)})` : 'no sightings on the other cameras');
+  } catch (e) { $('qstat').textContent = 'search failed: ' + e.message; }
   $('inv').disabled = false;
 };
 
-// --- input
+function watchSegment(src, cam) {
+  const lvl = { camera: cam, filename: src.split('/').pop(), original_video: '' };
+  loadLevel(lvl, [src]).then(() => { S.started = true; playSeg(0); $('facts').innerHTML = `watching <b>${esc(cam)}</b> · ${esc(src.split('/').pop())}`; });
+}
+
+// ---------------------------------------------------------------- incident report
+$('report').onclick = () => {
+  const k = S && S.killer; if (!k) return;
+  const id = 'HOP24-' + k.when.replace(/\D/g, '').slice(2, 12);
+  const hits = (k.hits || []).filter(h => h.camera !== k.camera).slice(0, 5);
+  const html = `
+    <h1>INCIDENT REPORT ${esc(id)}</h1>
+    <div class="meta">generated ${esc(k.when)} · source archive: VastDB vss-collection · corridor I-24 Nashville</div>
+    <table>
+      <tr><th style="width:160px">Event</th><td>Pedestrian (${k.auto ? 'autonomous agent' : 'player'}) struck by a <b>${esc(k.label)}</b> while crossing. Vehicle did not stop.</td></tr>
+      <tr><th>Camera / time</th><td>${esc(k.camera)}, segment ${k.seg}, t = ${k.t.toFixed(2)} s · ${esc(k.source)}</td></tr>
+      <tr><th>Detection</th><td>YOLO11 class <b>${esc(k.label)}</b>, confidence ${k.conf}, bbox [${k.bbox.map(n => Math.round(n)).join(', ')}] px</td></tr>
+      <tr><th>Archive description</th><td>${esc(k.caption || '(none stored)')}</td></tr>
+      <tr><th>Search issued</th><td class="mono">${esc(k.query || '(not run yet — click "Find my killer")')}</td></tr>
+      <tr><th>Sightings on other cameras</th><td>${hits.length ? '<ol style="margin:0;padding-left:18px">' + hits.map(h => `<li><b>${esc(h.camera)}</b> score ${h.score.toFixed(3)} — ${esc(h.caption.slice(0, 140))}…</li>`).join('') + '</ol>' : 'none yet'}</td></tr>
+      <tr><th>Last seen</th><td>${hits[0] ? esc(hits[0].camera) : 'unknown'}</td></tr>
+      <tr><th>Recommended action</th><td>Dispatch to the downstream pole; flag vehicle description to patrol; retain segments as evidence.</td></tr>
+    </table>
+    <p><img src="${k.crop}" alt="kill-cam frame"></p>
+    ${k.sql ? `<div class="sql">${esc(k.sql)}</div>` : ''}
+    <div class="actions"><button id="dl">Download report</button><button id="cp" class="alt">Copy as text</button><button id="pr" class="alt">Print</button><button id="cl" class="alt">Close</button></div>`;
+  $('sheet').innerHTML = html; $('modal').classList.add('on');
+  const text = `INCIDENT ${id}\nEvent: struck by ${k.label} on ${k.camera} seg ${k.seg} at ${k.t.toFixed(2)}s\nDetection: ${k.label} ${k.conf} bbox ${k.bbox.map(n => Math.round(n)).join(',')}\nDescription: ${k.caption || ''}\nQuery: ${k.query || ''}\nSightings: ${hits.map(h => h.camera + ' ' + h.score.toFixed(3)).join('; ') || 'none'}\n`;
+  $('dl').onclick = () => { const b = new Blob([`<!doctype html><meta charset="utf-8"><title>${id}</title><body style="font-family:Georgia,serif;max-width:820px;margin:30px auto">${$('sheet').innerHTML.replace(/<div class="actions">[\s\S]*$/, '')}</body>`], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = id + '.html'; a.click(); toast('report downloaded'); };
+  $('cp').onclick = () => navigator.clipboard.writeText(text).then(() => toast('copied'), () => toast('clipboard blocked on http — select and copy manually'));
+  $('pr').onclick = () => window.print();
+  $('cl').onclick = () => $('modal').classList.remove('on');
+};
+$('modal').onclick = e => { if (e.target === $('modal')) $('modal').classList.remove('on'); };
+
+// ---------------------------------------------------------------- sharpen (re-describe through the pipeline)
+let job = null, pollT = 0;
+$('redo').onclick = async () => {
+  if (!S || !S.level.original_video) return toast('pick a chunk level first');
+  $('redo').disabled = true; $('prog').style.display = ''; $('progi').style.width = '3%';
+  $('redoStat').textContent = 'starting re-describe job on the DataEngine pipeline…';
+  try {
+    const r = await post('redescribe', { original_video: S.level.original_video });
+    job = r.job_id; $('redoStat').textContent = `job ${job} started · detector → reasoner → embedder → VastDB writer`;
+    poll();
+  } catch (e) { $('redoStat').textContent = 'could not start: ' + e.message; $('redo').disabled = false; }
+};
+async function poll() {
+  try {
+    const st = await api('redescribe?job=' + encodeURIComponent(job));
+    const done = st.indexed_segments ?? st.completed_segments ?? 0, tot = st.total_segments ?? 6;
+    $('progi').style.width = Math.max(5, Math.round(done / Math.max(1, tot) * 100)) + '%';
+    $('redoStat').textContent = `${st.status || 'running'} · ${done}/${tot} segments re-described`;
+    if ((st.status || '').toLowerCase() === 'completed' || done >= tot) { $('redoStat').textContent = `completed · ${done}/${tot} segments carry the investigator description now`; $('recap').disabled = false; $('redo').disabled = false; toast('archive sharpened — re-read the caption, then search again'); return; }
+  } catch (e) { $('redoStat').textContent = 'status unavailable (' + e.message + ') — the job keeps running; re-read the caption in a minute'; $('recap').disabled = false; $('redo').disabled = false; return; }
+  pollT = setTimeout(poll, 4000);
+}
+$('recap').onclick = async () => {
+  const src = S && (S.killer ? S.killer.source : S.segments[S.segIdx]); if (!src) return;
+  $('cap').textContent = 'reading the fresh description…';
+  try { const r = await api('caption?fresh=1&source=' + encodeURIComponent(src)); $('cap').textContent = '📼 ' + (r.caption || '(empty)'); $('cap').classList.add('fresh'); if (S.killer) S.killer.caption = r.caption; } catch (e) { $('cap').textContent = 'failed: ' + e.message; }
+};
+
+// ---------------------------------------------------------------- input
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
-  if (e.code === 'Space') { e.preventDefault(); return start(); }
-  if (e.key === 'r' || e.key === 'R') return start();
-  if (e.key === 'b' || e.key === 'B') { showBoxes = !showBoxes; $('boxesBtn').textContent = 'Boxes: ' + (showBoxes ? 'on' : 'off') + ' (B)'; return; }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') { e.preventDefault(); return start(false); }
+  if (e.key === 'a' || e.key === 'A') return start(true);
+  if (e.key === 'r' || e.key === 'R') return start(S && S.auto);
+  if (e.key === 'b' || e.key === 'B') return toggleBoxes();
   if (e.key === 'c' || e.key === 'C') return beginCalibrate();
-  if (!S || !S.started || S.dead || S.won) return;
-  const c = S.chicken, step = (S.road.bottom - S.road.top) / 8;
-  let moved = true;
-  if (e.key === 'ArrowUp') c.y -= step; else if (e.key === 'ArrowDown') c.y += step;
-  else if (e.key === 'ArrowLeft') c.x -= 28; else if (e.key === 'ArrowRight') c.x += 28; else moved = false;
-  if (moved) { e.preventDefault(); c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y)); if (!S.t0) S.t0 = performance.now(); }
+  if (e.key === 'Escape') return $('modal').classList.remove('on');
+  if (!S || !S.started || S.dead || S.won || S.auto) return;
+  const c = S.chicken, step = (S.road.bottom - S.road.top) / 8; let moved = true;
+  if (e.key === 'ArrowUp') c.y -= step; else if (e.key === 'ArrowDown') c.y += step; else if (e.key === 'ArrowLeft') c.x -= 34; else if (e.key === 'ArrowRight') c.x += 34; else moved = false;
+  if (moved) { e.preventDefault(); S.anim++; c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y)); if (!S.t0) S.t0 = performance.now(); }
 });
-$('start').onclick = start;
-$('boxesBtn').onclick = () => { showBoxes = !showBoxes; $('boxesBtn').textContent = 'Boxes: ' + (showBoxes ? 'on' : 'off') + ' (B)'; };
-$('calBtn').onclick = beginCalibrate;
-function beginCalibrate() { if (!S) return; calibrating = 1; status('calibrate: click the TOP edge of the road on the video'); }
+function toggleBoxes() { showBoxes = !showBoxes; $('boxesBtn').classList.toggle('on', showBoxes); }
+$('start').onclick = () => start(false); $('auto').onclick = () => start(true); $('boxesBtn').onclick = toggleBoxes; $('calBtn').onclick = beginCalibrate;
+function beginCalibrate() { if (!S) return; calibrating = 1; toast('calibrate: click the TOP edge of the road on the video', 6000); }
 cv.addEventListener('click', e => {
   if (!calibrating || !S) return;
-  const r = cv.getBoundingClientRect(); const y = Math.round((e.clientY - r.top) * H / r.height);
-  if (calibrating === 1) { S.road.top = y; calibrating = 2; status('now click the BOTTOM edge of the road'); }
-  else { S.road.bottom = Math.max(y, S.road.top + 40); calibrating = 0; localStorage.setItem('hop24.road.' + S.level.camera, JSON.stringify(S.road)); S.chicken.y = Math.min(H - 36, S.road.bottom + 6); status('road saved for ' + S.level.camera); }
+  const r = cv.getBoundingClientRect(), y = Math.round((e.clientY - r.top) * H / r.height);
+  if (calibrating === 1) { S.road.top = y; calibrating = 2; toast('now click the BOTTOM edge of the road', 6000); }
+  else { S.road.bottom = Math.max(y, S.road.top + 60); calibrating = 0; localStorage.setItem('hop24.road.' + S.level.camera, JSON.stringify(S.road)); S.chicken.y = Math.min(H - 50, S.road.bottom + 4); toast('road band saved for ' + S.level.camera); }
 });
 
-// --- levels
+// ---------------------------------------------------------------- levels
+let cam = null;
+function renderCams() {
+  const cams = [...new Set(levels.map(l => l.camera))].sort();
+  $('cams').innerHTML = cams.map(c => `<span class="chip ${c === cam ? 'on' : ''}" data-cam="${esc(c)}">${esc(c)}</span>`).join('');
+  $('cams').querySelectorAll('.chip').forEach(el => el.onclick = () => { cam = el.dataset.cam; renderCams(); renderChunks(); });
+}
+function renderChunks(prefer) {
+  const ls = levels.filter(l => l.camera === cam);
+  $('level').innerHTML = ls.map((l, i) => `<option value="${levels.indexOf(l)}">${esc(l.filename.replace(/^\d+_\d+_scene\d+_p\d+c\d+_/, '').replace('.mp4', ''))} · ${l.n} seg</option>`).join('');
+  let idx = ls.findIndex(l => prefer && prefer.test(l.filename)); if (idx < 0) idx = 0;
+  if (ls[idx]) { $('level').value = levels.indexOf(ls[idx]); loadLevel(ls[idx], ls[idx].segments, { keepIntro: !S || !S.started }); }
+}
 $('level').onchange = () => { const l = levels[+$('level').value]; if (l) loadLevel(l, l.segments); };
 api('levels').then(r => {
   levels = r.levels || [];
-  if (!levels.length) { status('no I-24 levels found in the archive'); return; }
-  $('level').innerHTML = levels.map((l, i) => `<option value="${i}">${esc(l.camera)} · ${esc(l.filename.replace(/^\d+_\d+_scene\d+_p\d+c\d+_/, ''))} · ${l.n} seg</option>`).join('');
-  let pick = levels.findIndex(l => /p1c2_chunk_0003/.test(l.filename)); if (pick < 0) pick = 0;
-  $('level').value = pick;
-  return loadLevel(levels[pick], levels[pick].segments);
-}).catch(e => status('levels failed: ' + e.message));
+  if (!levels.length) { $('introStatus').textContent = 'no I-24 chunks found in the archive (is the backend reachable?)'; return; }
+  cam = levels.some(l => l.camera === 'scene1_p1c2') ? 'scene1_p1c2' : levels[0].camera;
+  renderCams(); renderChunks(/chunk_0003/);
+}).catch(e => { $('introStatus').textContent = 'archive unreachable: ' + e.message; });
 api('scores').then(r => renderScores(r.scores)).catch(() => {});
 })();
 </script>

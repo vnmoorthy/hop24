@@ -15,6 +15,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -266,6 +267,27 @@ def investigate(label, cap, query=None):
     return {"query": q, "sql": d.get("sql_query"), "hits": hits}
 
 
+REDESCRIBE_PROMPT = (
+    "Describe this overhead highway camera clip for a hit-and-run investigation. For every vehicle give: "
+    "type (sedan, SUV, pickup, van, semi-truck, box truck, bus), colour, lane number counted from the left "
+    "shoulder, direction of travel, and distinguishing features (trailer, cargo, roof rack, markings). Note any "
+    "vehicle changing lanes, braking, or passing close to another, with the time in seconds. Be specific and concise.")
+JOBS = {}
+
+
+def start_redescribe(original_video, prompt=None):
+    body = {"original_video": original_video, "chunk_count": 1, "custom_prompt": (prompt or REDESCRIBE_PROMPT)[:800]}
+    d = api("POST", "/dashboard/reingest", body=body)
+    job = d.get("job_id") or d.get("id") or ""
+    JOBS[job] = {"original_video": original_video, "started": time.time(), "resp": d}
+    return {"job_id": job, "response": d}
+
+
+def redescribe_status(job):
+    d = api("GET", "/dashboard/reingest/" + urllib.parse.quote(job))
+    return d
+
+
 # ---------------------------------------------------------------- mock mode
 MOCK_DIR = "/tmp/hop24_mock"
 
@@ -320,7 +342,7 @@ def self_update():
     if not RAW:
         return None
     os.makedirs(UPDATE_DIR, exist_ok=True)
-    for f in ("main.py", "index.html"):
+    for f in ("main.py", "index.html", "sprite.png"):
         with urllib.request.urlopen(RAW + f + "?t=" + str(int(time.time())), timeout=15) as r:
             data = r.read()
         with open(os.path.join(UPDATE_DIR, f), "wb") as fh:
@@ -338,7 +360,7 @@ class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):  # quieter
-        if "/stream" not in (args[0] if args else ""):
+        if "/stream" not in str(args[0] if args else ""):
             log(self.address_string(), fmt % args)
 
     def _json(self, obj, code=200):
@@ -435,13 +457,32 @@ class H(BaseHTTPRequestHandler):
             if p == "/boxes":
                 return self._json(mock_boxes(src) if MOCK else boxes(src))
             if p == "/caption":
-                txt = ("A white semi-truck and a red truck travel in opposite directions on a four-lane highway; "
-                       "two cars follow in the right lanes.") if MOCK else caption(src)
+                if q.get("fresh"):
+                    _cache.pop("cap:" + src, None)
+                if MOCK:
+                    done = "mock-job" in JOBS and time.time() - JOBS["mock-job"]["started"] > 18
+                    txt = ("Lane 1 (left): white semi-truck with a box trailer heading east at 0-5 s. Lane 2: red pickup, "
+                           "no cargo, eastbound. Lane 3: silver sedan, westbound, braking at 3 s. Lane 4: blue SUV, westbound. "
+                           "No lane changes.") if done else (
+                           "A white semi-truck and a red truck travel in opposite directions on a four-lane highway; "
+                           "two cars follow in the right lanes.")
+                else:
+                    txt = caption(src)
                 return self._json({"source": src, "caption": txt})
             if p == "/stream":
                 return self._range_file(mock_video(src)) if MOCK else self._proxy_stream(src)
             if p == "/scores":
                 return self._json({"scores": SCORES[-20:]})
+            if p == "/sprite.png":
+                return self._file(os.path.join(HERE, "sprite.png"), "image/png")
+            if p == "/redescribe":
+                job = (q.get("job") or [""])[0]
+                if MOCK:
+                    el = time.time() - JOBS.get(job, {}).get("started", time.time())
+                    done = min(6, int(el / 3))
+                    return self._json({"status": "completed" if done >= 6 else "running", "completed_chunks": 1 if done >= 6 else 0,
+                                       "total_chunks": 1, "indexed_segments": done, "total_segments": 6})
+                return self._json(redescribe_status(job))
             if p == "/reload":
                 if (q.get("key") or [""])[0] != RELOAD_KEY:
                     return self._json({"error": "bad key"}, 403)
@@ -451,7 +492,7 @@ class H(BaseHTTPRequestHandler):
                 return
             self.send_error(404)
         except Exception as e:  # noqa: BLE001
-            log("GET error", p, repr(e))
+            log("GET error", p, repr(e), traceback.format_exc().splitlines()[-3])
             try:
                 self._json({"error": repr(e)}, 500)
             except Exception:  # noqa: BLE001
@@ -470,6 +511,12 @@ class H(BaseHTTPRequestHandler):
                 SCORES.append({"name": str(body.get("name", "anon"))[:24], "result": body.get("result"),
                                "seconds": body.get("seconds"), "camera": body.get("camera"), "ts": time.time()})
                 return self._json({"ok": True, "scores": SCORES[-20:]})
+            if p == "/redescribe":
+                ov = body.get("original_video") or ""
+                if MOCK:
+                    JOBS["mock-job"] = {"started": time.time()}
+                    return self._json({"job_id": "mock-job", "response": {"selected_chunks": 1, "copied_segments": 6}})
+                return self._json(start_redescribe(ov, body.get("prompt")))
             if p == "/investigate":
                 if MOCK:
                     return self._json({"query": build_query(body.get("label"), body.get("caption")),
@@ -479,7 +526,7 @@ class H(BaseHTTPRequestHandler):
                 return self._json(investigate(body.get("label"), body.get("caption"), body.get("query")))
             self.send_error(404)
         except Exception as e:  # noqa: BLE001
-            log("POST error", p, repr(e))
+            log("POST error", p, repr(e), traceback.format_exc().splitlines()[-3])
             self._json({"error": repr(e)}, 500)
 
 
