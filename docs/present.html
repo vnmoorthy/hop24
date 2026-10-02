@@ -70,6 +70,26 @@
 <body>
 <div class="deck" id="deck">
 
+<!-- 0 scan & play -->
+<section class="slide" id="scan">
+  <img class="bgimg kb" src="img/intro.jpg" alt=""><div class="shade" style="background:rgba(7,10,15,.82)"></div>
+  <div class="row" style="align-items:center">
+    <div class="col" style="flex:.9;text-align:center">
+      <img src="img/qr.png" alt="QR code" style="width:min(46vh,34vw);border-radius:2vh;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+      <div class="mono" style="margin-top:2vh;font-size:2.4vh;color:var(--acc)">team-10-app.thecosmoslabs.com/app</div>
+    </div>
+    <div class="col">
+      <div class="kicker b">Before we start</div>
+      <h2 class="b">Scan. Cross a real highway.<br>Try not to die.</h2>
+      <p class="b">Tap to start, swipe up to hop. Every car on your phone is real Nashville traffic, every collision is a real detection stored in VastDB.</p>
+      <div class="b" style="margin-top:2vh">
+        <div class="mono dim" style="font-size:2vh;letter-spacing:.3em">LIVE SCOREBOARD <span id="sbTot" class="dim"></span></div>
+        <div id="sb" class="mono" style="font-size:2.4vh;line-height:1.7;margin-top:1vh;min-height:20vh;color:#d8e2ee">waiting for the first player…</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- 1 title -->
 <section class="slide" data-video="Hop24-trailer.mp4" data-start="4" data-end="11">
   <video class="bgvid" muted playsinline preload="auto"></video><div class="shade"></div>
@@ -194,6 +214,50 @@ ORDER BY array_cosine_distance(vectors::FLOAT[256], &lt;query&gt;) LIMIT 100    
   </div>
 </section>
 
+
+<!-- architecture -->
+<section class="slide" id="arch">
+  <div class="kicker">Architecture</div>
+  <h2>Built on the archive, not beside it</h2>
+  <svg viewBox="0 0 1600 640" style="width:100%;max-height:68vh" font-family="ui-monospace, Menlo, monospace">
+    <defs><marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5c6b80"/></marker>
+      <style>
+        .bx{fill:#111823;stroke:#223042;stroke-width:2;rx:14}
+        .t{fill:#e9eef6;font-size:22px;font-weight:700}.s{fill:#8b9bb0;font-size:16px}.k{fill:#ffcc33;font-size:15px;letter-spacing:.2em}
+        .ln{stroke:#5c6b80;stroke-width:3;fill:none;stroke-dasharray:10 8;marker-end:url(#ah)}
+        .on .ln{animation:dash 1.2s linear infinite}@keyframes dash{to{stroke-dashoffset:-18}}
+        .on .g{opacity:0;animation:pop .6s cubic-bezier(.2,1.2,.3,1) forwards}
+        .on .g1{animation-delay:.1s}.on .g2{animation-delay:.5s}.on .g3{animation-delay:.9s}.on .g4{animation-delay:1.3s}.on .g5{animation-delay:1.7s}.on .g6{animation-delay:2.2s}.on .g7{animation-delay:2.6s}
+        @keyframes pop{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+      </style></defs>
+    <g class="g g1"><rect class="bx" x="20" y="120" width="300" height="300"/><text class="k" x="40" y="155">BROWSER</text>
+      <text class="t" x="40" y="195">one HTML page</text>
+      <text class="s" x="40" y="228">1280×720 canvas · 2 video elements</text><text class="s" x="40" y="254">road axis = PCA of stored boxes</text>
+      <text class="s" x="40" y="280">collision = FastSAM silhouette</text><text class="s" x="40" y="306">autopilot = Q-table lookup</text>
+      <text class="s" x="40" y="332">kill-cam · blood · manhunt</text><text class="s" x="40" y="358">incident report</text></g>
+    <g class="g g2"><rect class="bx" x="380" y="150" width="280" height="240"/><text class="k" x="400" y="185">HOP 24 BACKEND</text>
+      <text class="t" x="400" y="225">Python stdlib</text><text class="s" x="400" y="258">/levels /boxes /masks</text><text class="s" x="400" y="284">/stream (JWT stays here)</text>
+      <text class="s" x="400" y="310">/caption /investigate</text><text class="s" x="400" y="336">/redescribe /policy.json</text></g>
+    <g class="g g3"><rect class="bx" x="720" y="150" width="260" height="240"/><text class="k" x="740" y="185">VSS REST API</text>
+      <text class="s" x="740" y="228">/videos/stream</text><text class="s" x="740" y="256">/videos/detections</text><text class="s" x="740" y="284">/videos/metadata</text>
+      <text class="s" x="740" y="312">/search  (hybrid)</text><text class="s" x="740" y="340">/dashboard/reingest</text></g>
+    <g class="g g4"><rect class="bx" x="1040" y="60" width="520" height="330" style="stroke:#ffcc33"/><text class="k" x="1060" y="95">VAST AI OS</text>
+      <text class="t" x="1060" y="135">S3 · 5-second segments</text>
+      <text class="t" x="1060" y="190">VastDB · vss-collection</text><text class="s" x="1060" y="218">caption · text + visual vectors · YOLO boxes · metadata</text>
+      <text class="t" x="1060" y="270">DataEngine pipeline</text><text class="s" x="1060" y="298">segment → detect → describe → embed → write</text>
+      <text class="s" x="1060" y="350">re-describe with an investigator prompt → sharper archive</text></g>
+    <g class="g g5"><rect class="bx" x="1040" y="420" width="520" height="120" style="stroke:#76b900"/><text class="k" x="1060" y="455" style="fill:#76b900">NVIDIA ON COREWEAVE</text>
+      <text class="s" x="1060" y="490">YOLO11s boxes · Cosmos3-Reason descriptions · Cosmos Embed1 vectors</text></g>
+    <g class="g g6"><rect class="bx" x="20" y="470" width="640" height="130" style="stroke:#3ddc84"/><text class="k" x="40" y="505" style="fill:#3ddc84">OFFLINE TOOLING</text>
+      <text class="s" x="40" y="540">seg/masks.py · FastSAM prompted by the stored boxes → masks__*.json</text>
+      <text class="s" x="40" y="570">rl/train.py · simulator from stored boxes → Q-learning → policy.json → Weights &amp; Biases</text></g>
+    <g class="g g7">
+      <path class="ln" d="M320 270 H370"/><path class="ln" d="M660 270 H710"/><path class="ln" d="M980 230 H1030"/><path class="ln" d="M980 320 H1030"/>
+      <path class="ln" d="M1300 390 V410"/><path class="ln" d="M340 470 C340 420 360 400 380 390"/>
+    </g>
+  </svg>
+</section>
+
 <!-- 10 close -->
 <section class="slide close">
   <img class="bgimg kb" src="img/hero.jpg" alt=""><div class="shade" style="background:rgba(7,10,15,.78)"></div>
@@ -234,6 +298,16 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Home') show(0);
 });
 show(Math.max(0, (parseInt(location.hash.slice(1)) || 1) - 1));
+const APP = 'https://team-10-app.thecosmoslabs.com/app/';
+async function pollScores() {
+  try {
+    const r = await fetch(APP + 'scores?n=12', { cache: 'no-store' }).then(r => r.json());
+    const rows = (r.scores || []).slice().reverse();
+    document.getElementById('sbTot').textContent = r.total ? `· ${r.total} runs · ${r.crossed || 0} crossed` : '';
+    document.getElementById('sb').innerHTML = rows.length ? rows.map(x => `<div>${x.result === 'crossed' ? '🟢' : '💥'} <b>${String(x.name).replace(/[<>&]/g, '')}</b> · ${x.result} · ${x.seconds}s</div>`).join('') : 'waiting for the first player…';
+  } catch (e) { document.getElementById('sb').textContent = 'scoreboard offline — play on your phone anyway'; }
+}
+pollScores(); setInterval(pollScores, 3000);
 })();
 </script>
 </body>

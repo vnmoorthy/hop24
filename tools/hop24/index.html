@@ -92,7 +92,7 @@
   .sheet .actions { display:flex; gap:8px; margin-top:16px; }
   .sheet .actions button { background:#111; color:#fff; border:none; }
   .sheet .actions button.alt { background:#eee; color:#111; }
-  @media (max-width:1000px){ main { grid-template-columns:1fr; } }
+  @media (max-width:1000px){ main { grid-template-columns:1fr; padding:10px; } header { padding:8px 10px; gap:8px; } .logo span { display:none; } #stage { touch-action:none; } }
 </style>
 </head>
 <body>
@@ -629,6 +629,22 @@ cv.addEventListener('click', e => {
   if (calibrating === 1) { S.axis.pmin = pv; calibrating = 2; toast('now click the FAR edge of the road (where you want to arrive)', 6000); }
   else { S.axis.pmax = Math.max(pv, S.axis.pmin + 60); calibrating = 0; localStorage.setItem('hop24.axis.' + S.level.camera, JSON.stringify(S.axis)); S.roadAuto = false; spawn(); toast('road edges saved for ' + S.level.camera); }
 });
+
+// ---------------------------------------------------------------- touch (phones): tap to start, swipe to hop
+let tx0 = 0, ty0 = 0, tt0 = 0;
+$('stage').addEventListener('touchstart', e => { const t = e.changedTouches[0]; tx0 = t.clientX; ty0 = t.clientY; tt0 = performance.now(); }, { passive: true });
+$('stage').addEventListener('touchend', e => {
+  const t = e.changedTouches[0], dx = t.clientX - tx0, dy = t.clientY - ty0, ad = Math.hypot(dx, dy);
+  if (!S) return;
+  if (ad < 18) { if (!S.started || S.dead || S.won) start(false); return; }
+  if (!S.started || S.dead || S.won || S.auto) return;
+  const c = S.chicken, a = S.axis, step = (a.pmax - a.pmin) / 8; S.anim++;
+  if (Math.abs(dy) > Math.abs(dx)) { const dir = dy < 0 ? 1 : -1; c.x += a.n[0] * step * dir; c.y += a.n[1] * step * dir; }
+  else { const dir = dx > 0 ? 1 : -1; c.x += a.d[0] * 34 * dir; c.y += a.d[1] * 34 * dir; }
+  c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y)); if (!S.t0) S.t0 = performance.now();
+  e.preventDefault();
+}, { passive: false });
+if (matchMedia('(pointer: coarse)').matches) { $('intro').querySelector('.keys').innerHTML = '<span>👆 tap to start</span><span>👆 swipe up to hop</span><span>👈👉 swipe sideways to move</span><span>🤖 Autopilot button lets the agent play</span>'; }
 
 // ---------------------------------------------------------------- levels
 let cam = null;

@@ -389,6 +389,7 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(data)
 
@@ -492,7 +493,8 @@ class H(BaseHTTPRequestHandler):
             if p == "/stream":
                 return self._range_file(mock_video(src)) if MOCK else self._proxy_stream(src)
             if p == "/scores":
-                return self._json({"scores": SCORES[-20:]})
+                n = int((q.get("n") or ["20"])[0])
+                return self._json({"scores": SCORES[-n:], "total": len(SCORES), "crossed": sum(1 for x in SCORES if x.get("result") == "crossed")})
             if p == "/sprite.png":
                 return self._file(os.path.join(HERE, "sprite.png"), "image/png")
             if p == "/blood.png":
