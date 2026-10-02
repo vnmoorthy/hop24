@@ -43,6 +43,9 @@ The presentation is a single HTML file: `←` `→` to move, `F` for fullscreen,
 
 ---
 
+- **Narrated demo video (5 min):** [`docs/Hop24-demo.mp4`](docs/Hop24-demo.mp4) — the whole presentation with voice-over; the script is [`docs/NARRATION.md`](docs/NARRATION.md) and the audio alone is [`docs/Hop24-narration.mp3`](docs/Hop24-narration.mp3).
+- **Scan to play:** the first slide of the presentation is a QR code (`docs/img/qr.png`) to the public app; the live scoreboard on that slide polls `/scores`.
+
 ## Play
 
 | Where | URL |
