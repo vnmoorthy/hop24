@@ -106,6 +106,7 @@
   <button id="auto" title="let the agent cross using the archive's detections">🤖 Autopilot <kbd>A</kbd></button>
   <button id="boxesBtn" class="on">Boxes <kbd>B</kbd></button>
   <button id="calBtn" class="ghost">Calibrate road <kbd>C</kbd></button>
+  <button id="muteBtn" class="ghost">🔊 Sound <kbd>M</kbd></button>
 </header>
 
 <main>
@@ -184,6 +185,83 @@ api('policy.json').then(p => { POLICY = p && p.q ? p : null; if (POLICY) { const
 function mkVideo() { const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; return v; }
 function toast(t, ms = 2600) { $('toast').textContent = t; $('toast').classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('on'), ms); }
 function segUrl(src) { return BASE + 'stream?source=' + encodeURIComponent(src); }
+
+
+// ---------------------------------------------------------------- sound (procedural Web Audio: no files)
+const SND = { ctx: null, muted: localStorage.getItem('hop24.muted') === '1', bed: null, lastHorn: 0, lastAmb: 0 };
+function audioCtx() {
+  if (!SND.ctx) { try { SND.ctx = new (window.AudioContext || window.webkitAudioContext)(); SND.master = SND.ctx.createGain(); SND.master.gain.value = SND.muted ? 0 : 0.9; SND.master.connect(SND.ctx.destination); } catch (e) { return null; } }
+  if (SND.ctx.state === 'suspended') SND.ctx.resume().catch(() => {});
+  return SND.ctx;
+}
+function noiseBuffer(ctx, sec, brown) {
+  const n = Math.floor(ctx.sampleRate * sec), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0); let last = 0;
+  for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; if (brown) { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w; }
+  return b;
+}
+function startBed() { // distant traffic: brown noise through a slow-wobbling lowpass + a low engine hum
+  const ctx = audioCtx(); if (!ctx || SND.bed) return;
+  const src = ctx.createBufferSource(); src.buffer = noiseBuffer(ctx, 4, true); src.loop = true;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 0.7;
+  const g = ctx.createGain(); g.gain.value = 0.0; g.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 1.5);
+  const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.13; lg.gain.value = 160; lfo.connect(lg); lg.connect(lp.frequency); lfo.start();
+  const hum = ctx.createOscillator(), hg = ctx.createGain(); hum.type = 'sawtooth'; hum.frequency.value = 55; hg.gain.value = 0.05;
+  const hl = ctx.createBiquadFilter(); hl.type = 'lowpass'; hl.frequency.value = 180; hum.connect(hl); hl.connect(hg); hg.connect(SND.master); hum.start();
+  src.connect(lp); lp.connect(g); g.connect(SND.master); src.start();
+  SND.bed = { src, g, hum, lfo };
+}
+function stopBed() { if (!SND.bed || !SND.ctx) return; const t = SND.ctx.currentTime; SND.bed.g.gain.linearRampToValueAtTime(0, t + 0.6); const b = SND.bed; setTimeout(() => { try { b.src.stop(); b.hum.stop(); b.lfo.stop(); } catch (e) {} }, 700); SND.bed = null; }
+function horn(pan = 0, dist = 1, long = false) { // two detuned saws (a real horn is a pair of notes), lowpassed, with a Doppler droop
+  const ctx = audioCtx(); if (!ctx) return;
+  const t = ctx.currentTime, dur = long ? 0.9 : 0.35 + Math.random() * 0.25, vol = Math.max(0.08, 0.5 / dist);
+  const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.03); g.gain.setValueAtTime(vol, t + dur - 0.08); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 2;
+  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (p) p.pan.value = pan;
+  for (const f of [392, 494]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f * (1 + Math.random() * 0.01), t); o.frequency.exponentialRampToValueAtTime(f * 0.94, t + dur); o.connect(lp); o.start(t); o.stop(t + dur + 0.05); }
+  lp.connect(g); if (p) { g.connect(p); p.connect(SND.master); } else g.connect(SND.master);
+}
+function screech() { // tires: highpassed white noise with a wobble
+  const ctx = audioCtx(); if (!ctx) return; const t = ctx.currentTime;
+  const src = ctx.createBufferSource(); src.buffer = noiseBuffer(ctx, 1, false);
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(2600, t); bp.frequency.linearRampToValueAtTime(1800, t + 0.5); bp.Q.value = 6;
+  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.05); g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  src.connect(bp); bp.connect(g); g.connect(SND.master); src.start(t); src.stop(t + 0.6);
+}
+function squawk(t0) { // the chicken: FM-ish sweep with vibrato, cut short by the impact
+  const ctx = audioCtx(); if (!ctx) return; const t = t0 ?? ctx.currentTime;
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(1100, t); o.frequency.exponentialRampToValueAtTime(1600, t + 0.08); o.frequency.exponentialRampToValueAtTime(420, t + 0.42);
+  const v = ctx.createOscillator(), vg = ctx.createGain(); v.frequency.value = 38; vg.gain.value = 90; v.connect(vg); vg.connect(o.frequency); v.start(t); v.stop(t + 0.5);
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 1.2;
+  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55, t + 0.03); g.gain.setValueAtTime(0.5, t + 0.3); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  o.connect(bp); bp.connect(g); g.connect(SND.master); o.start(t); o.stop(t + 0.5);
+}
+function thudSplat(t0) { // impact: sub thump + crunch burst, then a wet splat (lowpassed noise with a quick decay)
+  const ctx = audioCtx(); if (!ctx) return; const t = t0 ?? ctx.currentTime;
+  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(32, t + 0.25);
+  const og = ctx.createGain(); og.gain.setValueAtTime(1.0, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.3); o.connect(og); og.connect(SND.master); o.start(t); o.stop(t + 0.32);
+  const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.4, false);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3000, t); lp.frequency.exponentialRampToValueAtTime(300, t + 0.3);
+  const ng = ctx.createGain(); ng.gain.setValueAtTime(0.9, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.28); n.connect(lp); lp.connect(ng); ng.connect(SND.master); n.start(t); n.stop(t + 0.4);
+  const s = ctx.createBufferSource(); s.buffer = noiseBuffer(ctx, 0.5, false);
+  const sb = ctx.createBiquadFilter(); sb.type = 'bandpass'; sb.frequency.setValueAtTime(900, t + 0.06); sb.frequency.exponentialRampToValueAtTime(250, t + 0.4); sb.Q.value = 0.8;
+  const sg = ctx.createGain(); sg.gain.setValueAtTime(0.0001, t + 0.06); sg.gain.exponentialRampToValueAtTime(0.6, t + 0.09); sg.gain.exponentialRampToValueAtTime(0.001, t + 0.45); s.connect(sb); sb.connect(sg); sg.connect(SND.master); s.start(t + 0.06); s.stop(t + 0.5);
+}
+function deathSound() { const ctx = audioCtx(); if (!ctx) return; const t = ctx.currentTime; screech(); horn(0, 0.8, true); squawk(t + 0.12); thudSplat(t + 0.3); stopBed(); }
+function crossedSound() { const ctx = audioCtx(); if (!ctx) return; const t = ctx.currentTime; [523, 659, 784, 1047].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t + i * 0.09); g.gain.exponentialRampToValueAtTime(0.35, t + i * 0.09 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.35); o.connect(g); g.connect(SND.master); o.start(t + i * 0.09); o.stop(t + i * 0.09 + 0.4); }); stopBed(); }
+function toggleMute() { SND.muted = !SND.muted; localStorage.setItem('hop24.muted', SND.muted ? '1' : '0'); if (SND.master) SND.master.gain.value = SND.muted ? 0 : 0.9; $('muteBtn').textContent = (SND.muted ? '🔇' : '🔊') + ' Sound'; toast(SND.muted ? 'sound off' : 'sound on'); }
+// honks: a vehicle predicted to reach the chicken's cell within 0.9 s honks (panned to its side); plus occasional distant traffic honks
+function hornCheck(fr, now) {
+  if (!SND.ctx || SND.muted || !S.started || S.dead || S.won) return;
+  const c = S.chicken, sx = W / S.shape[1], sy = H / S.shape[0];
+  if (now - SND.lastHorn > 1.1) {
+    for (const q of (S.prevBoxes || [])) {
+      if (!q.known) continue;
+      for (let k = 1; k <= 6; k++) { const t = 0.9 * k / 6, bx = q.x + q.vx * t, by = q.y + q.vy * t;
+        if (bx < c.x + c.w + 40 && bx + q.w > c.x - 40 && by < c.y + c.h + 40 && by + q.h > c.y - 40) { horn(Math.max(-1, Math.min(1, (q.cx - W / 2) / (W / 2))), 1, false); SND.lastHorn = now; return; } }
+    }
+  }
+  if (now - SND.lastAmb > 4 && Math.random() < 0.012) { horn((Math.random() * 2 - 1), 3 + Math.random() * 3, false); SND.lastAmb = now; }
+}
 
 // ---------------------------------------------------------------- session
 function newSession(level, segments) {
@@ -273,6 +351,7 @@ function start(auto = false) {
   $('inv').disabled = true; $('report').disabled = true; $('manhunt').style.display = 'none';
   $('facts').textContent = auto ? 'Autopilot engaged: hops only when the next lane is clear for 0.6 s by extrapolating the stored tracks.' : 'Go. Reach the top shoulder.'; $('cap').textContent = ''; $('cap').classList.remove('fresh');
   kctx.clearRect(0, 0, kill.width, kill.height);
+  audioCtx(); startBed();
   playSeg(0);
 }
 
@@ -297,6 +376,20 @@ function curFrame(seg = S.segIdx, t = vids[S.active].currentTime) {
 }
 
 // ---------------------------------------------------------------- autopilot (no peeking: velocity from the last ~0.3 s of boxes)
+function trackForSound(fr, now) {
+  const sx = W / S.shape[1], sy = H / S.shape[0], prev = S.prevBoxes || [], cur = [];
+  for (const [label, conf, b] of fr.b) {
+    if (label === 'person') continue;
+    const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy, cx = x + w / 2, cy = y + h / 2;
+    let best = null, bd = Math.max(70, w);
+    for (const q of prev) { const d = Math.hypot(q.cx - cx, q.cy - cy); if (d < bd) { bd = d; best = q; } }
+    let vx = 0, vy = 0, known = false;
+    if (best && now - best.t > 0.02 && now - best.t < 0.4) { const dt = now - best.t; vx = (cx - best.cx) / dt; vy = (cy - best.cy) / dt; if (best.known) { vx = 0.5 * vx + 0.5 * best.vx; vy = 0.5 * vy + 0.5 * best.vy; } known = true; }
+    else if (best && best.known) { vx = best.vx; vy = best.vy; known = true; }
+    cur.push({ label, x, y, w, h, cx, cy, t: known || !best ? now : best.t, vx, vy, known });
+  }
+  S.prevBoxes = cur;
+}
 function autopilot(fr, now) {
   const c = S.chicken, a = S.axis, sx = W / S.shape[1], sy = H / S.shape[0];
   const step = (a.pmax - a.pmin) / 8, look = 0.65, margin = 16;
@@ -385,6 +478,8 @@ function draw() {
   }
   if (fr) {
     if (S.auto && !S.dead && !S.won) autopilot(fr, now);
+    if (!S.auto) trackForSound(fr, now);
+    hornCheck(fr, now);
     for (const [label, conf, b] of fr.b) {
       if (label === 'person') continue;
       const x = b[0] * sx, y = b[1] * sy, w = (b[2] - b[0]) * sx, h = (b[3] - b[1]) * sy;
@@ -478,7 +573,7 @@ function drawChicken(c, now) {
 
 // ---------------------------------------------------------------- incident
 function die(hit, v) {
-  S.dead = true; S.started = false; stopAll();
+  S.dead = true; S.started = false; stopAll(); try { deathSound(); } catch (e) {}
   $('stage').classList.add('shake'); $('thought').classList.remove('on');
   const secs = S.t0 ? ((performance.now() - S.t0) / 1000).toFixed(1) : '0.0';
   S.pendingBanner = ['SPLAT', `${S.auto ? 'the agent was ' : ''}killed by a ${hit.label} (${Math.round(hit.conf * 100)}% sure) after ${secs} s · space to retry`];
@@ -501,7 +596,7 @@ function die(hit, v) {
 }
 
 function win() {
-  S.won = true; S.started = false; stopAll(); $('thought').classList.remove('on');
+  S.won = true; S.started = false; stopAll(); try { crossedSound(); } catch (e) {} $('thought').classList.remove('on');
   const secs = ((performance.now() - S.t0) / 1000).toFixed(1);
   banner('CROSSED', `${S.auto ? 'the agent crossed' : 'you crossed'} in ${secs} s · space to play again`);
   post('score', { name: ($('name').value || 'anon') + (S.auto ? ' 🤖' : ''), result: 'crossed', seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
@@ -612,6 +707,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') return start(S && S.auto);
   if (e.key === 'b' || e.key === 'B') return toggleBoxes();
   if (e.key === 'c' || e.key === 'C') return beginCalibrate();
+  if (e.key === 'm' || e.key === 'M') return toggleMute();
   if (e.key === 'Escape') return $('modal').classList.remove('on');
   if (!S || !S.started || S.dead || S.won || S.auto) return;
   const c = S.chicken, a = S.axis, step = (a.pmax - a.pmin) / 8; let moved = true;
@@ -620,7 +716,7 @@ document.addEventListener('keydown', e => {
   if (moved) { e.preventDefault(); S.anim++; c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y)); if (!S.t0) S.t0 = performance.now(); }
 });
 function toggleBoxes() { showBoxes = !showBoxes; $('boxesBtn').classList.toggle('on', showBoxes); }
-$('start').onclick = () => start(false); $('auto').onclick = () => start(true); $('boxesBtn').onclick = toggleBoxes; $('calBtn').onclick = beginCalibrate;
+$('start').onclick = () => start(false); $('muteBtn').onclick = toggleMute; if (SND.muted) $('muteBtn').textContent = '🔇 Sound'; $('auto').onclick = () => start(true); $('boxesBtn').onclick = toggleBoxes; $('calBtn').onclick = beginCalibrate;
 function beginCalibrate() { if (!S || !S.axis) return; calibrating = 1; toast('calibrate: click the NEAR edge of the road (where you start)', 6000); }
 cv.addEventListener('click', e => {
   if (!calibrating || !S) return;
