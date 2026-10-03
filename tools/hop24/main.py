@@ -7,8 +7,10 @@ because the Ingress strips the /app prefix.
 
 Env: PORT, VSS_URL (in-cluster: http://video-backend-service:8000),
 VSS_USERNAME, VSS_PASSWORD. Optional: HOP24_MOCK=1 for a local demo with
-synthetic footage, HOP24_RAW=<raw github dir url> for /reload self-update.
+synthetic footage, HOP24_RAW=<raw github dir url> for /reload self-update,
+HOP24_LEARN_DIR (default /tmp/hop24-learn) for the Q-table the autopilot learns live.
 """
+import hashlib
 import json
 import os
 import re
@@ -399,6 +401,78 @@ def mock_video(source):
     return path
 
 
+# ---------------------------------------------------------------- online learning
+# Every finished autopilot run posts its (state, action, moved) trail to /experience. The server applies the
+# same Q-learning update as rl/train.py to the shipped Q-table and serves the result as /policy.json, so the
+# next run (in any browser) uses what the last one learned. The ConfigMap is read-only: the learned table is
+# kept in LEARN_DIR (point it at a volume to survive pod restarts) and is dropped if the shipped policy changes.
+LEARN_DIR = os.environ.get("HOP24_LEARN_DIR", "/tmp/hop24-learn")
+LEARN_ALPHA, LEARN_GAMMA = 0.15, 0.97                  # same as rl/train.py
+OUTCOME_REWARD = {"crossed": 10.0, "dead": -10.0, "timeout": -2.0}
+STATE_RE = re.compile(r"^[0-4],[0-4],[0-4],[0-4],[0-2],[01]$")
+MAX_STEPS = 1200                                       # 40 s of 30 fps frames; a clip is 30 s
+_policy = {"data": None}
+_plock = threading.RLock()
+
+
+def load_policy():
+    with _plock:
+        if _policy["data"] is None:
+            fp = find_asset("policy.json")
+            if not fp:
+                return None
+            with open(fp, "rb") as fh:
+                raw = fh.read()
+            base = hashlib.sha1(raw).hexdigest()[:12]
+            data = json.loads(raw)
+            try:
+                with open(os.path.join(LEARN_DIR, "policy.json")) as fh:
+                    learned = json.load(fh)
+                if learned.get("meta", {}).get("online", {}).get("base") == base:
+                    data = learned
+                    log("online policy restored:", data["meta"]["online"]["episodes"], "live runs")
+            except (OSError, ValueError):
+                pass
+            data.setdefault("meta", {}).setdefault("online", {"base": base, "episodes": 0, "crossed": 0, "dead": 0, "timeout": 0, "steps": 0})
+            _policy["data"] = data
+        return _policy["data"]
+
+
+def learn(body):
+    outcome, steps = body.get("outcome"), body.get("steps")
+    if outcome not in OUTCOME_REWARD or not isinstance(steps, list) or not 0 < len(steps) <= MAX_STEPS:
+        raise ValueError("expected outcome crossed|dead|timeout and 1-%d steps" % MAX_STEPS)
+    for s in steps:
+        if not (isinstance(s, list) and len(s) == 3 and isinstance(s[0], str) and STATE_RE.match(s[0])
+                and s[1] in (0, 1, 2) and s[2] in (-1, 0, 1)):
+            raise ValueError("bad step %r" % (s,))
+    with _plock:
+        pol = load_policy()
+        if pol is None:
+            raise ValueError("no policy to learn into")
+        Q, touched = pol["q"], {}
+        # backward sweep, so the outcome reaches the early decisions of this run in a single pass
+        for i in range(len(steps) - 1, -1, -1):
+            key, a, moved = steps[i]
+            q = Q.setdefault(key, [0.0, 0.0, 0.0])
+            if i == len(steps) - 1:
+                target = OUTCOME_REWARD[outcome]
+            else:
+                r = -0.04 + (0.5 if moved > 0 else -0.6 if moved < 0 else 0.0)
+                target = r + LEARN_GAMMA * max(Q.get(steps[i + 1][0], [0.0, 0.0, 0.0]))
+            q[a] = round(q[a] + LEARN_ALPHA * (target - q[a]), 4)
+            touched[key] = q
+        on = pol["meta"]["online"]
+        on["episodes"] += 1; on[outcome] += 1; on["steps"] += len(steps); on["updated"] = time.time()
+        os.makedirs(LEARN_DIR, exist_ok=True)
+        tmp = os.path.join(LEARN_DIR, "policy.json.tmp")
+        with open(tmp, "w") as fh:
+            json.dump(pol, fh)
+        os.replace(tmp, os.path.join(LEARN_DIR, "policy.json"))
+        log(f"learned from autopilot run: {outcome}, {len(steps)} steps, {len(touched)} states")
+        return {"ok": True, "q": touched, "online": on}
+
+
 # ---------------------------------------------------------------- self update
 def self_update():
     if not RAW:
@@ -561,8 +635,8 @@ class H(BaseHTTPRequestHandler):
                     fp = cands[0] if cands else fp
                 return self._file(fp, "application/json") if os.path.exists(fp) else self._json({"error": "no silhouettes for this segment"}, 404)
             if p == "/policy.json":
-                fp = find_asset("policy.json")
-                return self._file(fp, "application/json") if fp else self._json({"error": "no policy"}, 404)
+                pol = load_policy()
+                return self._json(pol) if pol else self._json({"error": "no policy"}, 404)
             if p == "/redescribe":
                 job = (q.get("job") or [""])[0]
                 if MOCK:
@@ -599,6 +673,11 @@ class H(BaseHTTPRequestHandler):
                 SCORES.append({"name": str(body.get("name", "anon"))[:24], "result": body.get("result"),
                                "seconds": body.get("seconds"), "camera": body.get("camera"), "ts": time.time()})
                 return self._json({"ok": True, "scores": SCORES[-20:]})
+            if p == "/experience":
+                try:
+                    return self._json(learn(body))
+                except ValueError as e:
+                    return self._json({"error": str(e)}, 400)
             if p == "/redescribe":
                 ov = body.get("original_video") or ""
                 if MOCK:

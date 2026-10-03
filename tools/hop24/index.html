@@ -180,7 +180,7 @@ const vids = [mkVideo(), mkVideo()];
 const sprite = new Image(); sprite.src = BASE + 'sprite.png';
 const blood = new Image(); blood.src = BASE + 'blood.png';
 let S = null, levels = [], showBoxes = true, calibrating = 0, frames = 0, fpsT = performance.now(), toastT = 0, POLICY = null;
-api('policy.json').then(p => { POLICY = p && p.q ? p : null; if (POLICY) { const m = POLICY.meta || {}; $('hmode').textContent = 'AUTOPILOT · RL policy'; $('hmode').title = `Q-learning, ${m.episodes} episodes on ${m.chunks} chunks · crossed ${Math.round((m.eval || {}).crossed * 100)}% vs heuristic ${Math.round((m.baseline || {}).crossed * 100)}%` + (m.wandb_name ? ` · W&B run ${m.wandb_name}` : ''); } }).catch(() => {});
+api('policy.json').then(p => { POLICY = p && p.q ? p : null; if (POLICY) { const m = POLICY.meta || {}; const on = m.online || {}; $('hmode').textContent = 'AUTOPILOT · RL policy' + (on.episodes ? ` · ${on.episodes} live run${on.episodes === 1 ? '' : 's'}` : ''); $('hmode').title = `Q-learning, ${m.episodes} episodes on ${m.chunks} chunks · crossed ${Math.round((m.eval || {}).crossed * 100)}% vs heuristic ${Math.round((m.baseline || {}).crossed * 100)}%` + (m.wandb_name ? ` · W&B run ${m.wandb_name}` : ''); } }).catch(() => {});
 
 function mkVideo() { const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; return v; }
 function toast(t, ms = 2600) { $('toast').textContent = t; $('toast').classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('on'), ms); }
@@ -344,7 +344,7 @@ function stopAll() { vids.forEach(v => { v.pause(); v.onended = null; }); }
 function start(auto = false) {
   if (!S) return;
   if (S.dead || S.won) return loadLevel(S.level, S.segments).then(() => start(auto));
-  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; S.hops = 0; S.bloodT0 = 0; S.bloodShot = false; vids.forEach(v => { v.playbackRate = 1; });
+  S.started = true; S.auto = auto; S.t0 = 0; S.dead = false; S.won = false; S.replay = null; S.pendingBanner = null; S.hist.clear(); S.prevBoxes = []; S.hops = 0; S.rlTraj = []; S.rlFr = null; S.bloodT0 = 0; S.bloodShot = false; vids.forEach(v => { v.playbackRate = 1; });
   if (S.spawn) { S.chicken.x = S.spawn[0]; S.chicken.y = S.spawn[1]; }
   $('intro').classList.remove('on'); $('stage').classList.remove('shake');
   $('hmode').style.display = auto ? '' : 'none'; $('thought').classList.toggle('on', auto);
@@ -365,7 +365,7 @@ function playSeg(i) {
   if (S.segments[nxt] && other.getAttribute('src') !== segUrl(S.segments[nxt])) { other.src = segUrl(S.segments[nxt]); other.load(); }
 }
 
-function timeUp() { if (S.dead || S.won) return; banner('TIME', 'the clip ran out before you crossed · space to retry'); stopAll(); S.started = false; }
+function timeUp() { if (S.dead || S.won) return; learn('timeout'); banner('TIME', 'the clip ran out before you crossed · space to retry'); stopAll(); S.started = false; }
 
 function curFrame(seg = S.segIdx, t = vids[S.active].currentTime) {
   const sg = S.boxes[seg]; if (!sg || !sg.fr.length) return null;
@@ -430,6 +430,7 @@ function autopilot(fr, now) {
     }
     return best;
   };
+  let rec = () => {};
   if (POLICY) {
     const bins = POLICY.bins_s, bin = e => { if (e === null) return bins.length; for (let i = 0; i < bins.length; i++) if (e < bins[i]) return i; return bins.length; };
     const eh = etaAt(c.x, c.y), en = etaAt(nx, ny), en2 = etaAt(c.x + a.n[0] * 2 * step, c.y + a.n[1] * 2 * step), eb = etaAt(bx, by);
@@ -437,17 +438,22 @@ function autopilot(fr, now) {
     const key = [bin(eh), bin(en), bin(en2), bin(eb), prog, cool ? 1 : 0].join(',');
     const q = POLICY.q[key];
     const lab = e => e === null ? 'clear' : e.toFixed(1) + 's';
+    // one transition per video frame, like a simulator step; posted to /experience when the run ends
+    const fresh = fr !== S.rlFr; S.rlFr = fr;
+    rec = (act, moved) => { if (fresh && S.rlTraj.length < 1200) S.rlTraj.push([key, act, moved]); };
     if (q) {
       const act = q.indexOf(Math.max(...q));
       const why = `RL · here ${lab(eh)} · next ${lab(en)} · +2 ${lab(en2)} · back ${lab(eb)} · lane ${S.hops || 0}/8 → ${POLICY.actions[act]}  (Q ${q.map(v => v.toFixed(1)).join(' / ')})`;
-      if (cool || act === 0) { $('thought').textContent = why; return; }
+      if (cool || act === 0) { rec(act, 0); $('thought').textContent = why; return; }
+      rec(act, act === 1 ? 1 : -1);
       return hop(act === 1 ? nx : bx, act === 1 ? ny : by, why, act === 1 ? 1 : -1);
     }
   }
-  if (cool) return;
+  if (cool) return rec(0, 0);
   const here = dangerAt(c.x, c.y), next = dangerAt(nx, ny);
-  if (!next) return hop(nx, ny, 'next lane clear for 0.65 s → hop');
-  if (here) { const back = dangerAt(bx, by); if (!back) return hop(bx, by, `dodge back · ${here.label} on me in ${here.eta}s, next lane also blocked by ${next.label}`, -1); }
+  if (!next) { rec(1, 1); return hop(nx, ny, 'next lane clear for 0.65 s → hop'); }
+  if (here) { const back = dangerAt(bx, by); if (!back) { rec(2, -1); return hop(bx, by, `dodge back · ${here.label} on me in ${here.eta}s, next lane also blocked by ${next.label}`, -1); } }
+  rec(0, 0);
   $('thought').textContent = `hold · ${next.label} crossing the next lane at ${next.v} px/s, there in ${next.eta}s`;
 }
 
@@ -574,6 +580,7 @@ function drawChicken(c, now) {
 // ---------------------------------------------------------------- incident
 function die(hit, v) {
   S.dead = true; S.started = false; stopAll(); try { deathSound(); } catch (e) {}
+  learn('dead');
   $('stage').classList.add('shake'); $('thought').classList.remove('on');
   const secs = S.t0 ? ((performance.now() - S.t0) / 1000).toFixed(1) : '0.0';
   S.pendingBanner = ['SPLAT', `${S.auto ? 'the agent was ' : ''}killed by a ${hit.label} (${Math.round(hit.conf * 100)}% sure) after ${secs} s · space to retry`];
@@ -597,9 +604,23 @@ function die(hit, v) {
 
 function win() {
   S.won = true; S.started = false; stopAll(); try { crossedSound(); } catch (e) {} $('thought').classList.remove('on');
+  learn('crossed');
   const secs = ((performance.now() - S.t0) / 1000).toFixed(1);
   banner('CROSSED', `${S.auto ? 'the agent crossed' : 'you crossed'} in ${secs} s · space to play again`);
   post('score', { name: ($('name').value || 'anon') + (S.auto ? ' 🤖' : ''), result: 'crossed', seconds: +secs, camera: S.level.camera }).then(r => renderScores(r.scores)).catch(() => {});
+}
+
+// the autopilot learns from every run it finishes: the server applies the Q-learning update and returns the
+// rows it changed, so the very next run already uses them
+function learn(outcome) {
+  if (!S.auto || !POLICY || !S.rlTraj || !S.rlTraj.length) return;
+  const steps = S.rlTraj; S.rlTraj = [];
+  post('experience', { outcome, steps, camera: S.level.camera }).then(r => {
+    if (!r || !r.q) return;
+    Object.assign(POLICY.q, r.q); (POLICY.meta = POLICY.meta || {}).online = r.online;
+    const o = r.online; $('hmode').textContent = `AUTOPILOT · RL policy · ${o.episodes} live run${o.episodes === 1 ? '' : 's'}`;
+    toast(`autopilot learned from this run: ${Object.keys(r.q).length} states updated (${o.crossed}/${o.episodes} live runs crossed)`, 4000);
+  }).catch(() => {});
 }
 
 function banner(big, sub) {

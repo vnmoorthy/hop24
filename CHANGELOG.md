@@ -4,6 +4,15 @@ All notable changes to Hop 24 are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Autopilot learns from live runs.** Each finished autopilot run posts its per-frame
+  `(state, action, moved)` trail to `POST /experience`; the backend applies the Q-learning update from
+  `rl/train.py` to the policy and `/policy.json` serves the updated table, so the next run uses it. The
+  learned table is kept in `HOP24_LEARN_DIR` (default `/tmp/hop24-learn`).
+
 ## [1.0.0] - 2026-10-02
 
 Hackathon build for the VAST Builders Challenge ("Real-Time Video Agents Hack - SF"), Team 10.
