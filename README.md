@@ -266,6 +266,10 @@ At runtime the page fetches `GET /masks?source=<segment>` (404 for segments with
 
 **In the browser.** The app serves `/policy.json`. The page computes the same six-part state live, looks it up in the Q-table and shows it in the thought line, for example `RL · here clear · next 0.4s · +2 clear · back clear · lane 3/8 → hop (Q …)`. Unseen states fall back to the rule-based agent. The HUD pill reads `AUTOPILOT · RL policy`.
 
+**Learning from live runs.** Every autopilot run keeps learning after training. The page records one `(state, action, moved)` step per video frame and, when the run ends (crossed, hit or clip over), posts the trail to `POST /experience`. The backend applies the same Q-learning update as `train.py` (α 0.15, γ 0.97, same rewards) in a backward sweep over the run, so a death lowers the value of the decisions that led to it in one pass. It replies with the Q rows it changed; the page merges them, so the very next run uses them, and `/policy.json` serves the updated table to every other browser. States the shipped table never saw are added the first time the rule-based fallback acts in them. The HUD pill counts live runs, and a toast reports how many states changed.
+
+The ConfigMap is read-only, so the learned table is written to `HOP24_LEARN_DIR` (default `/tmp/hop24-learn`). It survives `/reload` but not a pod restart unless that directory is a volume, and it is discarded when a retrained `policy.json` is deployed. Each replica learns on its own. The autopilot acts greedily, without exploration: live runs correct the values of the actions it already prefers and do not try alternatives.
+
 **Retrain.**
 
 ```bash
