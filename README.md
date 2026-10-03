@@ -239,6 +239,8 @@ At runtime the page fetches `GET /masks?source=<segment>` (404 for segments with
 
 ## Learned autopilot
 
+**Training run on Weights & Biases:** [report (Team 10 account)](https://wandb.ai/vnmoorthy-amperes-ai/sandbox/reports/Hop-24-autopilot-Q-learning-on-the-archive-detections--VmlldzoxODA0Nzk1Nw) · [public mirror in the hackathon's W&B team](https://wandb.ai/vastdata/hop24-autopilot/reports/Hop-24-autopilot---Q-learning-on-the-archive-detections--VmlldzoxODA0Nzc4OA==) · [run `pnhf5trb`](https://wandb.ai/vastdata/hop24-autopilot/runs/pnhf5trb) with the `hop24-autopilot-policy` artifact.
+
 `tools/hop24/rl/train.py` trains a tabular Q-learning policy on an offline simulator that replays the stored detections of all 30 highway chunks (27,000 frames) with the app's exact geometry: PCA road axis, 8 hops across, 44 px chicken on 1280x720, ellipse collision, nearest-neighbour velocity between frames, 900 px/s assumed for boxes with no estimate, 0.26 s hop cooldown, grace until the first hop.
 
 | | |

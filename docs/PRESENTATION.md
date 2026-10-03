@@ -230,3 +230,8 @@ One pole, three cameras (p1c1, p1c2, p1c3), ten 30-second chunks each, 30 fps, 1
 **How heavy are the detections?**
 150 frames per 5-second segment; about 1,430 boxes in one segment and 9,294 across one 30-second chunk. Classes seen: car, truck, bus (semis sometimes read as "bus", which is why the autopilot is label-agnostic).
 
+
+
+## Links to have open
+- W&B training report: https://wandb.ai/vnmoorthy-amperes-ai/sandbox/reports/Hop-24-autopilot-Q-learning-on-the-archive-detections--VmlldzoxODA0Nzk1Nw (public mirror: https://wandb.ai/vastdata/hop24-autopilot/reports/Hop-24-autopilot---Q-learning-on-the-archive-detections--VmlldzoxODA0Nzc4OA==)
+- Live app: https://team-10-app.thecosmoslabs.com/app/ · Presentation: https://vnmoorthy.github.io/hop24/present.html · Repo: https://github.com/vnmoorthy/hop24
